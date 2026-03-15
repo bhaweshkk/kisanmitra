@@ -5,8 +5,8 @@
 
     {
       "name": "claude",
-      "description": "Claude AI - Anthropic api key",
-      "enabled": true,
+      "description": "Anthropic Claude AI — chat completions",
+      "enabled": false,
       "method": "POST",
       "url": "https://api.anthropic.com/v1/messages",
       "apiKeyEnvVar": "ANTHROPIC_API_KEY",
@@ -23,18 +23,7 @@
       "timeoutSeconds": 30,
       "_note": "Set ANTHROPIC_API_KEY in .env — https://console.anthropic.com"
     },
-{
-  "name": "groq",
-  "description": "Groq — Free & Fast Llama 3 AI for farmers",
-  "enabled": true,
-  "method": "POST",
-  "url": "https://api.groq.com/openai/v1/chat/completions",
-  "apiKeyEnvVar": "GROQ_API_KEY",
-  "apiKeyHeader": "Authorization",
-  "apiKeyFormat": "Bearer {{GROQ_API_KEY}}",
-  "headers": { "Content-Type": "application/json" },
-  "timeoutSeconds": 20
-},
+
     {
       "name": "gemini",
       "description": "Google Gemini AI — free tier available",
@@ -114,7 +103,7 @@
       "url": "https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a43d0070",
       "forwardParams": ["state", "commodity", "market"],
       "staticParams": {
-        "api-key": "579b464db66ec23bdd000001cdd3946e44ce4aad7209ff7b23ac571b",
+        "api-key": "4342c6e49872401bb848345a59c19c86",
         "format": "json",
         "limit": "20"
       },
@@ -248,7 +237,24 @@
       "timeoutSeconds": 10,
       "_note": "Set FIREBASE_PROJECT and FIREBASE_SECRET in .env"
     },
-
+ {
+      "name": "groq",
+      "description": "Groq — Free Llama 3 AI, fastest responses",
+      "enabled": true,
+      "method": "POST",
+      "url": "https://api.groq.com/openai/v1/chat/completions",
+      "apiKeyEnvVar": "GROQ_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "apiKeyFormat": "Bearer {{GROQ_API_KEY}}",
+      "headers": { "Content-Type": "application/json" },
+      "bodyTemplate": {
+        "model": "llama3-8b-8192",
+        "messages": "{{messages}}",
+        "max_tokens": 1000
+      },
+      "timeoutSeconds": 20,
+      "_note": "Set GROQ_API_KEY in .env — https://console.groq.com"
+    },
     {
       "name": "custom-example",
       "description": "Template for your own custom API — copy and modify",
