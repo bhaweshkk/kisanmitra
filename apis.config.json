@@ -4,8 +4,8 @@
   "apis": [
 
     {
-      "name": "assembly",
-      "description": "Assembly AI — chat completions",
+      "name": "claude",
+      "description": "Claude AI - Anthropic api key",
       "enabled": true,
       "method": "POST",
       "url": "https://api.anthropic.com/v1/messages",
@@ -23,7 +23,18 @@
       "timeoutSeconds": 30,
       "_note": "Set ANTHROPIC_API_KEY in .env — https://console.anthropic.com"
     },
-
+{
+  "name": "groq",
+  "description": "Groq — Free & Fast Llama 3 AI for farmers",
+  "enabled": true,
+  "method": "POST",
+  "url": "https://api.groq.com/openai/v1/chat/completions",
+  "apiKeyEnvVar": "GROQ_API_KEY",
+  "apiKeyHeader": "Authorization",
+  "apiKeyFormat": "Bearer {{GROQ_API_KEY}}",
+  "headers": { "Content-Type": "application/json" },
+  "timeoutSeconds": 20
+},
     {
       "name": "gemini",
       "description": "Google Gemini AI — free tier available",
