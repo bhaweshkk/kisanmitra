@@ -2062,7 +2062,7 @@ ${liveCtx}`;
   try {
     // Use server proxy if no local API key (keeps key secure on server)
     const useServerProxy = !apiKey;
-    const chatUrl = useServerProxy ? '/api/plugins/claude' : 'https://api.anthropic.com/v1/messages';
+    const chatUrl = useServerProxy ? '/api/plugins/groq' : 'https://api.anthropic.com/v1/messages';
     const chatHeaders = {
       'Content-Type': 'application/json',
       ...(useServerProxy ? {} : {
