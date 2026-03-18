@@ -1,0 +1,41 @@
+{
+  "apis": [
+    {
+      "name": "claude",
+      "description": "Groq AI — KisanMitra AI chat proxy (uses Groq API)",
+      "enabled": true,
+      "method": "POST",
+      "url": "https://api.groq.com/openai/v1/chat/completions",
+      "apiKeyEnvVar": "GROQ_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "apiKeyFormat": "Bearer {{GROQ_API_KEY}}",
+      "headers": {
+        "content-type": "application/json"
+      },
+      "timeoutSeconds": 30
+    },
+    {
+      "name": "weather",
+      "description": "Open-Meteo free weather API",
+      "enabled": true,
+      "method": "GET",
+      "url": "https://api.open-meteo.com/v1/forecast",
+      "forwardParams": ["latitude", "longitude", "current", "daily", "timezone", "forecast_days"],
+      "cache": { "ttlMinutes": 10 }
+    },
+    {
+      "name": "mandi",
+      "description": "Agmarknet mandi prices — data.gov.in",
+      "enabled": true,
+      "method": "GET",
+      "url": "https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a43d0070",
+      "staticParams": {
+        "api-key": "579b464db66ec23d318f572b",
+        "format": "json",
+        "limit": "10"
+      },
+      "forwardParams": ["filters[State]"],
+      "cache": { "ttlMinutes": 30 }
+    }
+  ]
+}
