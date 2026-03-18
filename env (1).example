@@ -1,0 +1,45 @@
+# ═══════════════════════════════════════════════
+# KisanMitra Server — Environment Variables
+# Copy this file to .env and fill in your values
+# ═══════════════════════════════════════════════
+
+# ── Server ─────────────────────────────────────
+PORT=3000
+HTTPS_PORT=3443
+HOST=0.0.0.0
+MAX_REQ_PER_MIN=60
+DEBUG=0
+
+# ── Security (CHANGE THESE IN PRODUCTION!) ─────
+AUTH_SECRET=change-this-to-a-long-random-string-min-32-chars
+ADMIN_PASSWORD=change-this-admin-password
+
+# ── AI APIs (set "enabled":true in apis.config.json) ──
+GROQ_API_KEY=gsk_xxxx                # https://console.groq.com (FREE — primary AI)
+ANTHROPIC_API_KEY=sk-ant-xxxx        # https://console.anthropic.com (optional)
+GEMINI_API_KEY=AIzaSy-xxxx           # https://aistudio.google.com (FREE tier)
+OPENAI_API_KEY=sk-xxxx               # https://platform.openai.com/api-keys
+
+# ── Other APIs ──────────────────────────────────
+NEWSAPI_KEY=xxxx                     # https://newsapi.org (100 req/day free)
+GOOGLE_MAPS_KEY=xxxx                 # https://console.cloud.google.com
+
+# ── SMS / Payments ──────────────────────────────
+TWILIO_ACCOUNT_SID=ACxxxx
+TWILIO_AUTH_TOKEN=xxxx
+TWILIO_FROM=+1234567890
+RAZORPAY_KEY_ID=rzp_live_xxxx
+RAZORPAY_KEY_SECRET=xxxx
+
+# ── Firebase ────────────────────────────────────
+FIREBASE_PROJECT=your-project-id
+FIREBASE_SECRET=your-firebase-secret
+
+# ── Email Notifications ──────────────────────────
+# Gmail: enable 2FA → App Passwords at myaccount.google.com/apppasswords
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=you@gmail.com
+SMTP_PASS=your-16-char-app-password
+SMTP_FROM=KisanMitra <you@gmail.com>
+NOTIFY_EMAIL=admin@yourdomain.com
