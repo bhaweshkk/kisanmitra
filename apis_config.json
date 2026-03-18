@@ -1,0 +1,282 @@
+{
+  "_readme": "Add any API here. It gets a route at /api/plugins/<name> automatically. No code changes needed. Restart not required — file is hot-reloaded.",
+
+  "apis": [
+
+    {
+      "name": "claude",
+      "description": "Anthropic Claude AI — chat completions",
+      "enabled": false,
+      "method": "POST",
+      "url": "https://api.anthropic.com/v1/messages",
+      "apiKeyEnvVar": "ANTHROPIC_API_KEY",
+      "apiKeyHeader": "x-api-key",
+      "headers": {
+        "Content-Type": "application/json",
+        "anthropic-version": "2023-06-01"
+      },
+      "bodyTemplate": {
+        "model": "claude-sonnet-4-20250514",
+        "max_tokens": 1000,
+        "messages": "{{messages}}"
+      },
+      "timeoutSeconds": 30,
+      "_note": "Set ANTHROPIC_API_KEY in .env — https://console.anthropic.com"
+    },
+
+    {
+      "name": "gemini",
+      "description": "Google Gemini AI — free tier available",
+      "enabled": false,
+      "method": "POST",
+      "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent",
+      "apiKeyEnvVar": "GEMINI_API_KEY",
+      "apiKeyHeader": "x-goog-api-key",
+      "headers": { "Content-Type": "application/json" },
+      "bodyTemplate": {
+        "contents": [{ "parts": [{ "text": "{{prompt}}" }] }]
+      },
+      "timeoutSeconds": 20,
+      "_note": "Set GEMINI_API_KEY in .env — https://aistudio.google.com/app/apikey"
+    },
+
+    {
+      "name": "openai",
+      "description": "OpenAI GPT-4 / GPT-3.5 chat completions",
+      "enabled": false,
+      "method": "POST",
+      "url": "https://api.openai.com/v1/chat/completions",
+      "apiKeyEnvVar": "OPENAI_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "apiKeyFormat": "Bearer {{OPENAI_API_KEY}}",
+      "headers": { "Content-Type": "application/json" },
+      "bodyTemplate": {
+        "model": "gpt-4o-mini",
+        "messages": "{{messages}}",
+        "max_tokens": 1000
+      },
+      "timeoutSeconds": 30,
+      "_note": "Set OPENAI_API_KEY in .env — https://platform.openai.com/api-keys"
+    },
+
+    {
+      "name": "weather",
+      "description": "Open-Meteo weather forecast — FREE, no key needed",
+      "enabled": true,
+      "method": "GET",
+      "url": "https://api.open-meteo.com/v1/forecast",
+      "forwardParams": ["latitude", "longitude", "lat", "lon"],
+      "staticParams": {
+        "current": "temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code",
+        "daily": "temperature_2m_max,temperature_2m_min,precipitation_sum",
+        "forecast_days": "7",
+        "timezone": "Asia/Kolkata"
+      },
+      "cache": { "ttlMinutes": 10 },
+      "timeoutSeconds": 10
+    },
+
+    {
+      "name": "geocode",
+      "description": "OpenStreetMap Nominatim geocoding — FREE, no key needed",
+      "enabled": true,
+      "method": "GET",
+      "url": "https://nominatim.openstreetmap.org/search",
+      "forwardParams": ["q", "city", "state", "country"],
+      "staticParams": {
+        "format": "json",
+        "limit": "5",
+        "countrycodes": "in"
+      },
+      "headers": {
+        "User-Agent": "KisanMitra/1.0"
+      },
+      "cache": { "ttlMinutes": 60 },
+      "timeoutSeconds": 8
+    },
+
+    {
+      "name": "mandi",
+      "description": "Agmarknet mandi/crop prices — India government open data",
+      "enabled": true,
+      "method": "GET",
+      "url": "https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a43d0070",
+      "forwardParams": ["state", "commodity", "market"],
+      "staticParams": {
+        "api-key": "4342c6e49872401bb848345a59c19c86",
+        "format": "json",
+        "limit": "20"
+      },
+      "cache": { "ttlMinutes": 30 },
+      "timeoutSeconds": 12,
+      "_note": "Free government API, no personal key needed"
+    },
+
+    {
+      "name": "soil",
+      "description": "REST Countries / SoilGrids soil data — FREE",
+      "enabled": true,
+      "method": "GET",
+      "url": "https://rest.isric.org/soilgrids/v2.0/properties/query",
+      "forwardParams": ["lon", "lat"],
+      "staticParams": {
+        "property": "phh2o,soc,clay",
+        "depth": "0-5cm",
+        "value": "mean"
+      },
+      "cache": { "ttlMinutes": 120 },
+      "timeoutSeconds": 15
+    },
+
+    {
+      "name": "translate",
+      "description": "LibreTranslate — FREE open-source translation",
+      "enabled": true,
+      "method": "POST",
+      "url": "https://libretranslate.com/translate",
+      "headers": { "Content-Type": "application/json" },
+      "bodyTemplate": {
+        "q": "{{text}}",
+        "source": "{{from}}",
+        "target": "{{to}}",
+        "format": "text"
+      },
+      "cache": { "ttlMinutes": 60 },
+      "timeoutSeconds": 10,
+      "_note": "Free public instance — may have rate limits. Self-host for unlimited usage."
+    },
+
+    {
+      "name": "agrinews",
+      "description": "NewsAPI — agriculture and farming news",
+      "enabled": false,
+      "method": "GET",
+      "url": "https://newsapi.org/v2/everything",
+      "apiKeyEnvVar": "NEWSAPI_KEY",
+      "apiKeyHeader": "X-Api-Key",
+      "forwardParams": ["q", "language", "pageSize"],
+      "staticParams": {
+        "q": "farming agriculture india kisan",
+        "language": "en",
+        "pageSize": "10",
+        "sortBy": "publishedAt"
+      },
+      "responseField": "articles",
+      "responseEnvelope": "articles",
+      "cache": { "ttlMinutes": 15 },
+      "timeoutSeconds": 10,
+      "_note": "Set NEWSAPI_KEY in .env — https://newsapi.org (free 100 req/day)"
+    },
+
+    {
+      "name": "maps",
+      "description": "Google Maps Geocoding",
+      "enabled": false,
+      "method": "GET",
+      "url": "https://maps.googleapis.com/maps/api/geocode/json",
+      "apiKeyEnvVar": "GOOGLE_MAPS_KEY",
+      "forwardParams": ["address", "latlng"],
+      "staticParams": {
+        "key": "{{GOOGLE_MAPS_KEY}}",
+        "region": "in",
+        "language": "hi"
+      },
+      "cache": { "ttlMinutes": 60 },
+      "timeoutSeconds": 8,
+      "_note": "Set GOOGLE_MAPS_KEY in .env — https://console.cloud.google.com"
+    },
+
+    {
+      "name": "sms",
+      "description": "Twilio SMS — send OTPs and alerts to farmers",
+      "enabled": false,
+      "method": "POST",
+      "url": "https://api.twilio.com/2010-04-01/Accounts/{{TWILIO_ACCOUNT_SID}}/Messages.json",
+      "apiKeyEnvVar": "TWILIO_AUTH_TOKEN",
+      "apiKeyHeader": "Authorization",
+      "apiKeyFormat": "Basic {{TWILIO_AUTH_TOKEN}}",
+      "headers": { "Content-Type": "application/x-www-form-urlencoded" },
+      "bodyTemplate": {
+        "To":   "{{to}}",
+        "From": "{{TWILIO_FROM}}",
+        "Body": "{{message}}"
+      },
+      "timeoutSeconds": 15,
+      "_note": "Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM in .env"
+    },
+
+    {
+      "name": "razorpay-orders",
+      "description": "Razorpay — create payment orders",
+      "enabled": false,
+      "method": "POST",
+      "url": "https://api.razorpay.com/v1/orders",
+      "apiKeyEnvVar": "RAZORPAY_KEY_SECRET",
+      "apiKeyHeader": "Authorization",
+      "apiKeyFormat": "Basic {{RAZORPAY_KEY_SECRET}}",
+      "headers": { "Content-Type": "application/json" },
+      "bodyTemplate": {
+        "amount":   "{{amount}}",
+        "currency": "INR",
+        "receipt":  "{{receipt}}"
+      },
+      "timeoutSeconds": 10,
+      "_note": "Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in .env"
+    },
+
+    {
+      "name": "firebase-db",
+      "description": "Firebase Realtime Database REST API",
+      "enabled": false,
+      "method": "GET",
+      "url": "https://{{FIREBASE_PROJECT}}.firebaseio.com/{{path}}.json",
+      "forwardParams": ["path"],
+      "staticParams": {
+        "auth": "{{FIREBASE_SECRET}}"
+      },
+      "timeoutSeconds": 10,
+      "_note": "Set FIREBASE_PROJECT and FIREBASE_SECRET in .env"
+    },
+ {
+      "name": "groq",
+      "description": "Groq — Free Llama 3 AI, fastest responses",
+      "enabled": true,
+      "method": "POST",
+      "url": "https://api.groq.com/openai/v1/chat/completions",
+      "apiKeyEnvVar": "GROQ_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "apiKeyFormat": "Bearer {{GROQ_API_KEY}}",
+      "headers": { "Content-Type": "application/json" },
+      "bodyTemplate": {
+        "model": "llama3-8b-8192",
+        "messages": "{{messages}}",
+        "max_tokens": 1000
+      },
+      "timeoutSeconds": 20,
+      "_note": "Set GROQ_API_KEY in .env — https://console.groq.com"
+    },
+    {
+      "name": "custom-example",
+      "description": "Template for your own custom API — copy and modify",
+      "enabled": false,
+      "method": "GET",
+      "url": "https://your-api.example.com/endpoint",
+      "apiKeyEnvVar": "YOUR_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "apiKeyFormat": "Bearer {{YOUR_API_KEY}}",
+      "headers": {
+        "Content-Type": "application/json",
+        "X-Custom-Header": "KisanMitra"
+      },
+      "forwardParams": ["param1", "param2"],
+      "staticParams": {
+        "version": "v1",
+        "format": "json"
+      },
+      "responseField": "data.results",
+      "responseEnvelope": "results",
+      "cache": { "ttlMinutes": 5 },
+      "timeoutSeconds": 15
+    }
+  ]
+}

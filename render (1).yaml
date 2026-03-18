@@ -1,0 +1,46 @@
+# render.yaml — Free deployment config for Render.com
+# Render auto-detects this file — no manual setup needed!
+
+services:
+  - type: web
+    name: kisanmitra
+    env: node
+    region: singapore        # Closest free region to India
+    plan: free
+    buildCommand: echo "No build step needed — zero dependencies!"
+    startCommand: node server.js
+    healthCheckPath: /api/health
+
+    envVars:
+      # Render sets PORT automatically — do NOT change this
+      - key: PORT
+        value: 10000
+
+      - key: NODE_ENV
+        value: production
+
+      # ── Set these in Render Dashboard → Environment ──
+      # (sync: false = you must enter the value manually in Render UI)
+
+      - key: GROQ_API_KEY
+        sync: false          # https://console.groq.com (FREE)
+
+      - key: AUTH_SECRET
+        generateValue: true  # Render auto-generates a secure random value ✅
+
+      - key: ADMIN_PASSWORD
+        sync: false          # Set your own admin dashboard password
+
+      # Optional — add if you want these features:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: NEWSAPI_KEY
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: NOTIFY_EMAIL
+        sync: false
