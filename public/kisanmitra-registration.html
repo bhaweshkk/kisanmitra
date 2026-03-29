@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KisanMitra — Register & Login</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --green: #3B6D11; --green-light: #EAF3DE; --green-mid: #639922;
+  --amber: #BA7517; --amber-light: #FAEEDA;
+  --red: #A32D2D; --red-light: #FCEBEB;
+  --blue: #185FA5; --blue-light: #E6F1FB;
+  --gray-light: #F1EFE8; --gray-mid: #D3D1C7;
+  --text: #2C2C2A; --text-muted: #888780;
+  --bg: #fff; --border: rgba(0,0,0,0.12);
+  --radius: 10px;
+}
+body { font-family: system-ui,-apple-system,sans-serif; background:#f5f4f0; color:var(--text); min-height:100vh; }
+nav { background:var(--green); color:#fff; padding:0 20px; display:flex; align-items:center; justify-content:space-between; height:54px; position:sticky; top:0; z-index:50; }
+.nav-brand { display:flex; align-items:center; gap:8px; font-size:17px; font-weight:700; text-decoration:none; color:#fff; }
+.nav-tabs { display:flex; gap:2px; }
+.nav-tab { background:none; border:none; color:rgba(255,255,255,0.72); padding:7px 14px; border-radius:6px; cursor:pointer; font-size:13px; font-weight:600; transition:all .15s; }
+.nav-tab.active,.nav-tab:hover { background:rgba(255,255,255,0.15); color:#fff; }
+.page { display:none; padding:28px 16px; max-width:960px; margin:0 auto; }
+.page.active { display:block; }
+.card { background:#fff; border:0.5px solid var(--border); border-radius:var(--radius); padding:24px; margin-bottom:18px; }
+.card-title { font-size:20px; font-weight:700; margin-bottom:4px; }
+.card-sub { color:var(--text-muted); font-size:14px; margin-bottom:20px; }
+.hero { background:linear-gradient(135deg,var(--green-light),#fff); border:0.5px solid var(--border); border-radius:var(--radius); padding:36px 28px; text-align:center; margin-bottom:20px; }
+.hero h1 { font-size:26px; font-weight:700; color:var(--green); margin-bottom:8px; }
+.hero p { color:var(--text-muted); font-size:14px; margin-bottom:22px; }
+.btn { padding:10px 22px; border-radius:8px; font-size:14px; font-weight:600; cursor:pointer; border:none; transition:all .15s; display:inline-flex; align-items:center; gap:6px; font-family:inherit; }
+.btn-green { background:var(--green); color:#fff; }
+.btn-green:hover:not(:disabled) { background:#2d5209; }
+.btn-amber { background:var(--amber); color:#fff; }
+.btn-amber:hover { background:#8a5810; }
+.btn-outline { background:transparent; border:1px solid var(--border); color:var(--text); }
+.btn-outline:hover { background:var(--gray-light); }
+.btn-red { background:var(--red); color:#fff; }
+.btn-sm { padding:5px 12px; font-size:12px; }
+.btn:disabled { opacity:.55; cursor:not-allowed; }
+.btn-full { width:100%; justify-content:center; padding:13px; font-size:15px; }
+.form-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.fg { display:flex; flex-direction:column; gap:5px; }
+.fg.full { grid-column:1/-1; }
+label { font-size:12px; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:.04em; }
+input,select { padding:9px 12px; border:1px solid var(--gray-mid); border-radius:8px; font-size:14px; font-family:inherit; color:var(--text); width:100%; transition:border-color .15s; background:#fff; }
+input:focus,select:focus { outline:none; border-color:var(--green); box-shadow:0 0 0 3px rgba(59,109,17,.1); }
+.role-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:22px; }
+.role-card { border:2px solid var(--border); border-radius:var(--radius); padding:18px; cursor:pointer; transition:all .15s; text-align:center; }
+.role-card:hover { border-color:var(--green-mid); background:var(--green-light); }
+.role-card.selected { border-color:var(--green); background:var(--green-light); }
+.role-card .ri { font-size:30px; margin-bottom:6px; }
+.role-card strong { display:block; font-size:15px; color:var(--green); margin-bottom:3px; }
+.role-card span { font-size:12px; color:var(--text-muted); }
+.alert { padding:11px 15px; border-radius:8px; font-size:13px; margin-bottom:14px; display:flex; align-items:flex-start; gap:8px; line-height:1.4; }
+.alert-success { background:#dcfce7; color:#166534; border:1px solid #86efac; }
+.alert-error   { background:var(--red-light); color:var(--red); border:1px solid #fca5a5; }
+.alert-info    { background:var(--blue-light); color:var(--blue); border:1px solid #93c5fd; }
+.spin { width:16px; height:16px; border:2px solid rgba(255,255,255,.35); border-top-color:#fff; border-radius:50%; animation:spin .7s linear infinite; flex-shrink:0; }
+@keyframes spin { to { transform:rotate(360deg); } }
+.divider { border-top:1px solid var(--border); margin:18px 0; }
+.table-wrap { overflow-x:auto; }
+table { width:100%; border-collapse:collapse; font-size:13px; }
+th { text-align:left; padding:9px 11px; font-size:11px; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:.04em; border-bottom:1px solid var(--border); background:var(--gray-light); }
+td { padding:11px 11px; border-bottom:1px solid var(--border); vertical-align:middle; }
+tr:last-child td { border:none; }
+tr:hover td { background:var(--gray-light); }
+.stats-row { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:20px; }
+.stat { background:var(--gray-light); border-radius:8px; padding:14px; }
+.stat .n { font-size:26px; font-weight:700; }
+.stat .l { font-size:11px; color:var(--text-muted); margin-top:2px; }
+.tag { display:inline-flex; align-items:center; padding:3px 9px; border-radius:20px; font-size:11px; font-weight:700; }
+.tag-farmer { background:var(--green-light); color:var(--green); }
+.tag-buyer  { background:var(--amber-light); color:var(--amber); }
+.tag-active { background:#dcfce7; color:#166534; }
+.tag-suspended { background:var(--red-light); color:var(--red); }
+.av { width:34px; height:34px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:13px; flex-shrink:0; }
+.av-g { background:var(--green-light); color:var(--green); }
+.av-a { background:var(--amber-light); color:var(--amber); }
+.modal-bg { display:none; position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:200; align-items:center; justify-content:center; }
+.modal-bg.open { display:flex; }
+.modal { background:#fff; border-radius:12px; padding:26px; width:100%; max-width:440px; margin:16px; }
+.dash-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+.detail-row { display:flex; justify-content:space-between; padding:7px 0; border-bottom:1px solid var(--border); font-size:13px; }
+.detail-row:last-child { border:none; }
+.detail-row .k { color:var(--text-muted); }
+.detail-row .v { font-weight:600; text-align:right; max-width:58%; }
+.search-row { display:flex; gap:8px; margin-bottom:14px; }
+.search-row input { flex:1; }
+.search-row select { width:130px; }
+.empty { text-align:center; padding:40px; color:var(--text-muted); }
+.empty .ei { font-size:36px; margin-bottom:10px; }
+@media(max-width:640px){
+  .form-grid,.role-grid,.dash-grid { grid-template-columns:1fr; }
+  .stats-row { grid-template-columns:1fr 1fr; }
+  .nav-tab .lbl { display:none; }
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-brand" href="https://kisanmitra-2.onrender.com/">🌱 KisanMitra</a>
+  <div class="nav-tabs">
+    <button class="nav-tab active" id="tab-home"      onclick="go('home')">🏠 <span class="lbl">Home</span></button>
+    <button class="nav-tab"        id="tab-register"  onclick="go('register')">📝 <span class="lbl">Register</span></button>
+    <button class="nav-tab"        id="tab-login"     onclick="go('login')">🔑 <span class="lbl">Login</span></button>
+    <button class="nav-tab"        id="tab-dashboard" onclick="go('dashboard')" style="display:none">📊 <span class="lbl">Dashboard</span></button>
+    <button class="nav-tab"        id="tab-admin"     onclick="go('admin')"     style="display:none">🛡️ <span class="lbl">Admin</span></button>
+    <button class="nav-tab"        id="tab-logout"    onclick="doLogout()"      style="display:none">🚪 <span class="lbl">Logout</span></button>
+  </div>
+</nav>
+
+<!-- HOME -->
+<div class="page active" id="page-home">
+  <div class="hero">
+    <h1>🌾 Welcome to KisanMitra</h1>
+    <p>Connecting farmers and buyers across India. Register to access live mandi prices, weather forecasts, and the AI farming assistant.</p>
+    <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
+      <button class="btn btn-green" onclick="go('register')">👨‍🌾 Register Now</button>
+      <button class="btn btn-amber" onclick="go('login')">🔑 Login</button>
+      <a href="https://kisanmitra-2.onrender.com/" class="btn btn-outline">🌐 Open App</a>
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;">
+    <div class="card" style="text-align:center"><div style="font-size:30px;margin-bottom:8px">🌡️</div><strong>Live Weather</strong><p style="font-size:12px;color:var(--text-muted);margin-top:4px">Real-time weather for your location</p></div>
+    <div class="card" style="text-align:center"><div style="font-size:30px;margin-bottom:8px">📈</div><strong>Mandi Prices</strong><p style="font-size:12px;color:var(--text-muted);margin-top:4px">Live crop prices from data.gov.in</p></div>
+    <div class="card" style="text-align:center"><div style="font-size:30px;margin-bottom:8px">🤖</div><strong>AI Assistant</strong><p style="font-size:12px;color:var(--text-muted);margin-top:4px">Ask anything about crops, soil & farming</p></div>
+  </div>
+</div>
+
+<!-- REGISTER -->
+<div class="page" id="page-register">
+  <div class="card">
+    <div class="card-title">Create Account</div>
+    <div class="card-sub">Register as a farmer or buyer to access all features</div>
+    <div id="reg-alert"></div>
+    <div class="role-grid">
+      <div class="role-card selected" id="rc-farmer" onclick="pickRole('farmer')">
+        <div class="ri">👨‍🌾</div><strong>Farmer</strong>
+        <span>I grow crops and want to sell produce & access resources</span>
+      </div>
+      <div class="role-card" id="rc-buyer" onclick="pickRole('buyer')">
+        <div class="ri">🏪</div><strong>Buyer / Trader</strong>
+        <span>I want to buy produce directly from farmers</span>
+      </div>
+    </div>
+    <div class="form-grid">
+      <div class="fg"><label>Full Name *</label><input id="r-name" type="text" placeholder="e.g. Ram Kumar"></div>
+      <div class="fg"><label>Mobile Number *</label><input id="r-phone" type="tel" placeholder="10-digit number" maxlength="10"></div>
+      <div class="fg"><label>Email Address</label><input id="r-email" type="email" placeholder="optional"></div>
+      <div class="fg"><label>Password *</label><input id="r-pass" type="password" placeholder="Min 6 characters"></div>
+      <div class="fg">
+        <label>State *</label>
+        <select id="r-state">
+          <option value="">-- Select State --</option>
+          <option>Rajasthan</option><option>Uttar Pradesh</option><option>Madhya Pradesh</option>
+          <option>Punjab</option><option>Haryana</option><option>Maharashtra</option>
+          <option>Gujarat</option><option>Bihar</option><option>West Bengal</option>
+          <option>Karnataka</option><option>Andhra Pradesh</option><option>Tamil Nadu</option>
+          <option>Telangana</option><option>Odisha</option><option>Other</option>
+        </select>
+      </div>
+      <div class="fg"><label>District *</label><input id="r-district" type="text" placeholder="Your district"></div>
+      <div class="fg"><label>Village / City</label><input id="r-village" type="text" placeholder="Village or city name"></div>
+      <div class="fg"><label>Aadhaar (optional)</label><input id="r-aadhar" type="text" placeholder="XXXX-XXXX-XXXX" maxlength="14"></div>
+      <div class="fg full" id="sec-farmer">
+        <div class="divider"></div>
+        <p style="font-size:14px;font-weight:700;margin-bottom:12px;">🌾 Farm Details</p>
+        <div class="form-grid">
+          <div class="fg"><label>Farm Size (acres)</label><input id="r-farmsize" type="number" placeholder="e.g. 5"></div>
+          <div class="fg"><label>Primary Crop(s)</label><input id="r-crops" type="text" placeholder="Wheat, Rice, Tomato..."></div>
+          <div class="fg full">
+            <label>Irrigation Type</label>
+            <select id="r-irrigation">
+              <option value="">-- Select --</option>
+              <option>Rain-fed</option><option>Canal irrigation</option>
+              <option>Drip irrigation</option><option>Borewell / Tubewell</option><option>Other</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="fg full" id="sec-buyer" style="display:none">
+        <div class="divider"></div>
+        <p style="font-size:14px;font-weight:700;margin-bottom:12px;">🏪 Business Details</p>
+        <div class="form-grid">
+          <div class="fg"><label>Business Name</label><input id="r-biz" type="text" placeholder="Your business / mandi name"></div>
+          <div class="fg">
+            <label>Business Type</label>
+            <select id="r-biztype">
+              <option value="">-- Select --</option>
+              <option>Trader / Adhatiya</option><option>Retailer</option>
+              <option>Wholesaler</option><option>Exporter</option><option>Processing unit</option>
+            </select>
+          </div>
+          <div class="fg full"><label>Crops Interested In Buying</label><input id="r-interested" type="text" placeholder="Wheat, Maize, Vegetables..."></div>
+        </div>
+      </div>
+      <div class="fg full">
+        <button class="btn btn-green btn-full" id="reg-btn" onclick="doRegister()">Create Account</button>
+        <p style="text-align:center;font-size:13px;color:var(--text-muted);margin-top:10px">Already have an account? <a href="#" onclick="go('login')" style="color:var(--green)">Login here</a></p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- LOGIN -->
+<div class="page" id="page-login">
+  <div class="card" style="max-width:420px;margin:0 auto">
+    <div class="card-title">Login</div>
+    <div class="card-sub">Welcome back to KisanMitra</div>
+    <div id="login-alert"></div>
+    <div style="display:flex;flex-direction:column;gap:13px">
+      <div class="fg"><label>Mobile Number or Email</label><input id="l-id" type="text" placeholder="Enter mobile or email"></div>
+      <div class="fg"><label>Password</label><input id="l-pass" type="password" placeholder="Your password" onkeydown="if(event.key==='Enter')doLogin()"></div>
+      <button class="btn btn-green btn-full" id="login-btn" onclick="doLogin()">Login</button>
+      <p style="text-align:center;font-size:13px;color:var(--text-muted)">No account? <a href="#" onclick="go('register')" style="color:var(--green)">Register here</a></p>
+      <div style="border-top:1px solid var(--border);padding-top:14px;text-align:center">
+        <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px">Admin access</p>
+        <button class="btn btn-outline btn-sm" onclick="adminLoginPrompt()">🛡️ Admin Login</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- DASHBOARD -->
+<div class="page" id="page-dashboard">
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+      <div><h2 id="d-name" style="font-size:20px;font-weight:700">Welcome!</h2><p id="d-info" style="font-size:13px;color:var(--text-muted);margin-top:2px"></p></div>
+      <span id="d-tag" class="tag"></span>
+    </div>
+  </div>
+  <div class="dash-grid">
+    <div class="card">
+      <p style="font-size:14px;font-weight:700;margin-bottom:14px">Your Profile</p>
+      <div id="d-details"></div>
+    </div>
+    <div class="card">
+      <p style="font-size:14px;font-weight:700;margin-bottom:14px">Quick Access</p>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <a href="https://kisanmitra-2.onrender.com/" class="btn btn-green" style="text-align:center;justify-content:center;">🌱 Go to KisanMitra Dashboard →</a>
+        <p style="font-size:12px;color:var(--text-muted);margin-top:6px;">You are logged in. Click above to open the main app — your name and profile will be loaded automatically.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ADMIN -->
+<div class="page" id="page-admin">
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:18px">
+      <div><h2 style="font-size:20px;font-weight:700">🛡️ Admin Panel</h2><p style="font-size:13px;color:var(--text-muted)">Manage all registered users</p></div>
+      <button class="btn btn-outline btn-sm" onclick="exportCSV()">⬇️ Export CSV</button>
+    </div>
+    <div class="stats-row" id="admin-stats"></div>
+    <div class="search-row">
+      <input type="text" placeholder="Search name, phone, district..." oninput="filterTable()" id="s-search">
+      <select id="s-role" onchange="filterTable()"><option value="">All Roles</option><option value="farmer">Farmers</option><option value="buyer">Buyers</option></select>
+      <select id="s-status" onchange="filterTable()"><option value="">All Status</option><option value="active">Active</option><option value="suspended">Suspended</option></select>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>User</th><th>Role</th><th>Location</th><th>Contact</th><th>Registered</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody id="admin-tbody"></tbody>
+      </table>
+    </div>
+    <div class="empty" id="admin-empty" style="display:none"><div class="ei">👤</div><p>No users found</p></div>
+    <div id="admin-alert" style="margin-top:12px"></div>
+  </div>
+</div>
+
+<!-- MODAL -->
+<div class="modal-bg" id="modal">
+  <div class="modal">
+    <h3 id="modal-title" style="font-size:17px;font-weight:700;margin-bottom:8px"></h3>
+    <p id="modal-body" style="font-size:13px;color:var(--text-muted)"></p>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">
+      <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+      <button class="btn" id="modal-ok" onclick="confirmModal()">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ─── CONFIG ────────────────────────────────────────────
+   Set this to your Render server URL.
+   The page calls these endpoints:
+     POST /api/auth/register
+     POST /api/auth/login
+     GET  /api/auth/me
+     GET  /api/admin/users
+     DELETE /api/admin/contacts/:id
+────────────────────────────────────────────────────── */
+const SERVER = 'https://kisanmitra-2.onrender.com';
+
+/* ─── STATE ──────────────────────────────────────────── */
+let currentUser  = null;
+let currentRole  = 'farmer';
+let pendingModal = null;
+let allUsers     = [];
+
+/* ─── STORAGE ────────────────────────────────────────── */
+const Store = {
+  getToken() { return localStorage.getItem('km_token'); },
+  setToken(v){ v ? localStorage.setItem('km_token',v) : localStorage.removeItem('km_token'); },
+  getUser()  { try{return JSON.parse(localStorage.getItem('km_user'));}catch{return null;} },
+  setUser(v) { v ? localStorage.setItem('km_user',JSON.stringify(v)) : localStorage.removeItem('km_user'); },
+  clear()    { this.setToken(null); this.setUser(null); }
+};
+
+/* ─── API ────────────────────────────────────────────── */
+async function api(method, path, body) {
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  const tok = Store.getToken();
+  if (tok) opts.headers['Authorization'] = 'Bearer ' + tok;
+  if (body) opts.body = JSON.stringify(body);
+  try {
+    const res  = await fetch(SERVER + path, opts);
+    const data = await res.json().catch(() => ({}));
+    return { ok: res.ok, status: res.status, data };
+  } catch(e) {
+    return { ok:false, status:0, data:{ error:'Cannot reach server. Please check your connection or try again.' } };
+  }
+}
+
+/* ─── LOCAL USER DB (fallback when server auth isn't deployed) ──────── */
+const LocalDB = {
+  getUsers() { try { return JSON.parse(localStorage.getItem('km_local_users') || '[]'); } catch { return []; } },
+  saveUsers(u) { localStorage.setItem('km_local_users', JSON.stringify(u)); },
+  findUser(phone, email) {
+    return this.getUsers().find(u => (phone && u.phone === phone) || (email && u.email === email));
+  },
+  addUser(u) { const users = this.getUsers(); users.push(u); this.saveUsers(users); return u; },
+  getAll() { return this.getUsers().filter(u => u.role !== 'admin'); }
+};
+
+/* ─── INIT: restore session ──────────────────────────── */
+(async () => {
+  // First try cached user (works offline)
+  const cached = Store.getUser();
+  if (cached) {
+    currentUser = cached;
+    afterLogin(false);
+    // Then verify with server in background
+    if (Store.getToken()) {
+      const r = await api('GET', '/api/auth/me');
+      if (r.ok && r.data && r.data.user) {
+        currentUser = r.data.user;
+        Store.setUser(currentUser);
+      }
+    }
+    return;
+  }
+  // No cached user — start fresh
+})();
+
+/* ─── NAV ────────────────────────────────────────────── */
+function go(page) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('page-' + page).classList.add('active');
+  const tab = document.getElementById('tab-' + page);
+  if (tab) tab.classList.add('active');
+  if (page === 'admin')     loadAdminUsers();
+  if (page === 'dashboard') renderDash();
+}
+
+function afterLogin(redirect = true) {
+  document.getElementById('tab-register').style.display = 'none';
+  document.getElementById('tab-login').style.display    = 'none';
+  document.getElementById('tab-logout').style.display   = '';
+  if (currentUser && currentUser.role === 'admin') {
+    document.getElementById('tab-admin').style.display = '';
+    if (redirect) go('admin');
+  } else {
+    document.getElementById('tab-dashboard').style.display = '';
+    if (redirect) go('dashboard');
+  }
+}
+
+function doLogout() {
+  Store.clear();
+  currentUser = null; allUsers = [];
+  ['tab-dashboard','tab-admin','tab-logout'].forEach(id => document.getElementById(id).style.display='none');
+  ['tab-register','tab-login'].forEach(id => document.getElementById(id).style.display='');
+  go('home');
+}
+
+/* ─── ROLE PICKER ────────────────────────────────────── */
+function pickRole(r) {
+  currentRole = r;
+  document.getElementById('rc-farmer').classList.toggle('selected', r==='farmer');
+  document.getElementById('rc-buyer').classList.toggle('selected',  r==='buyer');
+  document.getElementById('sec-farmer').style.display = r==='farmer' ? 'flex' : 'none';
+  document.getElementById('sec-buyer').style.display  = r==='buyer'  ? 'flex' : 'none';
+}
+
+/* ─── REGISTER ───────────────────────────────────────── */
+async function doRegister() {
+  clearAlert('reg-alert');
+  const name     = val('r-name');
+  const phone    = val('r-phone');
+  const email    = val('r-email');
+  const password = val('r-pass');
+  const state    = val('r-state');
+  const district = val('r-district');
+
+  if (!name)                    return showAlert('reg-alert','error','Please enter your full name.');
+  if (!/^\d{10}$/.test(phone)) return showAlert('reg-alert','error','Enter a valid 10-digit mobile number.');
+  if (password.length < 6)     return showAlert('reg-alert','error','Password must be at least 6 characters.');
+  if (!state || !district)     return showAlert('reg-alert','error','Please select state and enter district.');
+
+  const body = { name, phone, email, password, role:currentRole, state, district,
+                 village:val('r-village'), aadhar:val('r-aadhar') };
+  if (currentRole==='farmer') {
+    body.farmSize   = val('r-farmsize');
+    body.crops      = val('r-crops');
+    body.irrigation = val('r-irrigation');
+  } else {
+    body.businessName    = val('r-biz');
+    body.businessType    = val('r-biztype');
+    body.interestedCrops = val('r-interested');
+  }
+
+  // Check for duplicate locally first
+  if (LocalDB.findUser(phone, email)) {
+    return showAlert('reg-alert','error','This mobile number or email is already registered. Please login.');
+  }
+
+  setBusy('reg-btn', true, 'Registering...');
+  const r = await api('POST', '/api/auth/register', body);
+  setBusy('reg-btn', false, 'Create Account');
+
+  if (r.ok && r.data && r.data.token) {
+    // Server registration succeeded
+    Store.setToken(r.data.token);
+    Store.setUser(r.data.user);
+    LocalDB.addUser({...body, _id: r.data.user._id || r.data.user.id || 'u_'+Date.now(), status:'active', createdAt: new Date().toISOString()});
+    currentUser = r.data.user;
+    showAlert('reg-alert','success','✅ Account created! Opening KisanMitra...');
+    setTimeout(() => { window.location.href = 'https://kisanmitra-2.onrender.com/'; }, 1200);
+  } else if (r.status === 0 || r.status === 500 || r.status === 404) {
+    // Server unreachable — save locally so user can still use app
+    const localUser = {
+      ...body, _id: 'local_'+Date.now(), id: 'local_'+Date.now(),
+      status:'active', createdAt: new Date().toISOString(), token: 'local_token'
+    };
+    LocalDB.addUser(localUser);
+    Store.setUser(localUser);
+    Store.setToken('local_' + Date.now());
+    currentUser = localUser;
+    showAlert('reg-alert','success','✅ Account created (offline mode)! Opening KisanMitra...');
+    setTimeout(() => { window.location.href = 'https://kisanmitra-2.onrender.com/'; }, 1200);
+  } else {
+    const msg = (r.data && (r.data.error || r.data.message)) || 'Registration failed. Please try again.';
+    showAlert('reg-alert','error', msg);
+  }
+}
+
+/* ─── LOGIN ──────────────────────────────────────────── */
+async function doLogin() {
+  clearAlert('login-alert');
+  const id   = val('l-id');
+  const pass = val('l-pass');
+  if (!id || !pass) return showAlert('login-alert','error','Please enter your mobile/email and password.');
+
+  const body = { password: pass };
+  if (/^\d+$/.test(id)) body.phone = id;
+  else                   body.email = id;
+
+  setBusy('login-btn', true, 'Logging in...');
+  const r = await api('POST', '/api/auth/login', body);
+  setBusy('login-btn', false, 'Login');
+
+  if (r.ok && r.data && r.data.token) {
+    // Server login succeeded
+    Store.setToken(r.data.token);
+    Store.setUser(r.data.user);
+    currentUser = r.data.user;
+    showAlert('login-alert','success','✅ Login successful! Opening KisanMitra...');
+    setTimeout(() => { window.location.href = 'https://kisanmitra-2.onrender.com/'; }, 900);
+  } else if (r.status === 0 || r.status === 500 || r.status === 404) {
+    // Server down — check local users
+    const localUser = LocalDB.findUser(body.phone, body.email);
+    if (localUser && localUser.password === body.password) {
+      Store.setUser(localUser);
+      Store.setToken('local_' + Date.now());
+      currentUser = localUser;
+      showAlert('login-alert','success','✅ Login successful (offline mode)! Opening KisanMitra...');
+      setTimeout(() => { window.location.href = 'https://kisanmitra-2.onrender.com/'; }, 900);
+    } else {
+      showAlert('login-alert','error', 'Server is unreachable and no local account found. Please check your connection.');
+    }
+  } else {
+    const msg = (r.data && (r.data.error || r.data.message)) || 'Invalid credentials. Please try again.';
+    showAlert('login-alert','error', msg);
+  }
+}
+
+async function adminLoginPrompt() {
+  const pass = prompt('Enter admin password:');
+  if (pass === null || pass === '') return;
+  const r = await api('POST', '/api/auth/login', { phone:'admin', password:pass });
+  if (r.ok && r.data && r.data.token) {
+    Store.setToken(r.data.token);
+    Store.setUser(r.data.user);
+    currentUser = r.data.user;
+    showAlert('login-alert','success','✅ Login successful! Opening KisanMitra...');
+    setTimeout(() => { window.location.href = 'https://kisanmitra-2.onrender.com/'; }, 900);
+  } else {
+    alert('Wrong admin password or server error.');
+  }
+}
+
+/* ─── DASHBOARD ──────────────────────────────────────── */
+function renderDash() {
+  const u = currentUser || Store.getUser();
+  if (!u) return;
+  document.getElementById('d-name').textContent = '👋 Welcome, ' + u.name;
+  const loc   = [u.village, u.district, u.state].filter(Boolean).join(', ');
+  const since = u.createdAt ? ' • Joined ' + new Date(u.createdAt).toLocaleDateString('en-IN') : '';
+  document.getElementById('d-info').textContent = loc + since;
+  const tag = document.getElementById('d-tag');
+  tag.className = 'tag tag-' + (u.role||'farmer');
+  tag.textContent = u.role === 'buyer' ? '🏪 Buyer' : '👨‍🌾 Farmer';
+
+  const rows = [
+    ['📱 Mobile', u.phone],
+    ['📧 Email',  u.email || 'Not provided'],
+    ['📍 Location', loc || '—'],
+  ];
+  if (u.role === 'farmer') {
+    if (u.farmSize)   rows.push(['🌾 Farm Size', u.farmSize + ' acres']);
+    if (u.crops)      rows.push(['🌱 Crops', u.crops]);
+    if (u.irrigation) rows.push(['💧 Irrigation', u.irrigation]);
+  } else {
+    if (u.businessName)    rows.push(['🏢 Business', u.businessName]);
+    if (u.businessType)    rows.push(['🏷️ Type', u.businessType]);
+    if (u.interestedCrops) rows.push(['🛒 Buying', u.interestedCrops]);
+  }
+  document.getElementById('d-details').innerHTML =
+    rows.map(([k,v]) => `<div class="detail-row"><span class="k">${k}</span><span class="v">${v||'—'}</span></div>`).join('');
+}
+
+/* ─── ADMIN ──────────────────────────────────────────── */
+async function loadAdminUsers() {
+  document.getElementById('admin-tbody').innerHTML =
+    '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-muted)">⏳ Loading users...</td></tr>';
+  const r = await api('GET', '/api/admin/users');
+  if (r.ok) {
+    const raw = r.data;
+    allUsers = (Array.isArray(raw) ? raw : (raw.users || raw.contacts || [])).filter(u => u.role !== 'admin');
+    // Merge any local-only users
+    const serverIds = new Set(allUsers.map(u => u.phone));
+    LocalDB.getAll().forEach(u => { if (!serverIds.has(u.phone)) allUsers.push(u); });
+  } else {
+    // Fall back to local users
+    allUsers = LocalDB.getAll();
+    if (allUsers.length) showAlert('admin-alert','info','Showing locally stored users (server offline).');
+    else showAlert('admin-alert','error', (r.data && r.data.error) || 'Could not load users from server.');
+  }
+  filterTable();
+}
+
+function filterTable() {
+  const q  = (document.getElementById('s-search')?.value||'').toLowerCase();
+  const rf = document.getElementById('s-role')?.value   || '';
+  const sf = document.getElementById('s-status')?.value || '';
+
+  const list = allUsers.filter(u => {
+    const txt = [u.name,u.phone,u.email,u.district,u.state].join(' ').toLowerCase();
+    return (!q  || txt.includes(q))
+        && (!rf || u.role   === rf)
+        && (!sf || u.status === sf);
+  });
+
+  document.getElementById('admin-stats').innerHTML = `
+    <div class="stat"><div class="n">${allUsers.length}</div><div class="l">Total Users</div></div>
+    <div class="stat"><div class="n">${allUsers.filter(u=>u.role==='farmer').length}</div><div class="l">Farmers</div></div>
+    <div class="stat"><div class="n">${allUsers.filter(u=>u.role==='buyer').length}</div><div class="l">Buyers</div></div>
+    <div class="stat"><div class="n">${allUsers.filter(u=>u.status==='suspended').length}</div><div class="l">Suspended</div></div>
+  `;
+
+  const empty = document.getElementById('admin-empty');
+  const tbody = document.getElementById('admin-tbody');
+  if (!list.length) { tbody.innerHTML=''; empty.style.display=''; return; }
+  empty.style.display = 'none';
+
+  tbody.innerHTML = list.map(u => {
+    const uid  = u._id || u.id || '';
+    const init = (u.name||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+    const avc  = u.role==='farmer' ? 'av-g' : 'av-a';
+    const date = u.createdAt ? new Date(u.createdAt).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'2-digit'}) : '—';
+    const stTag = u.status==='suspended'
+      ? '<span class="tag tag-suspended">Suspended</span>'
+      : '<span class="tag tag-active">Active</span>';
+    const actBtn = u.status==='suspended'
+      ? `<button class="btn btn-sm" style="background:var(--green-light);color:var(--green);border:none;cursor:pointer" onclick="openModal('restore','${uid}')">✅ Restore</button>`
+      : `<button class="btn btn-sm" style="background:var(--amber-light);color:var(--amber);border:none;cursor:pointer" onclick="openModal('suspend','${uid}')">⏸ Suspend</button>`;
+    return `<tr>
+      <td><div style="display:flex;align-items:center;gap:8px"><div class="av ${avc}">${init}</div><div><div style="font-weight:600;font-size:13px">${u.name}</div><div style="font-size:11px;color:var(--text-muted)">ID:${uid.slice(-6)}</div></div></div></td>
+      <td><span class="tag tag-${u.role}">${u.role==='farmer'?'👨‍🌾 Farmer':'🏪 Buyer'}</span></td>
+      <td style="font-size:12px">${[u.district,u.state].filter(Boolean).join(', ')||'—'}</td>
+      <td><div style="font-size:12px">${u.phone||'—'}</div><div style="font-size:11px;color:var(--text-muted)">${u.email||''}</div></td>
+      <td style="font-size:12px">${date}</td>
+      <td>${stTag}</td>
+      <td><div style="display:flex;gap:5px">${actBtn}<button class="btn btn-sm btn-red" onclick="openModal('delete','${uid}')">🗑</button></div></td>
+    </tr>`;
+  }).join('');
+}
+
+function openModal(type, uid) {
+  const cfg = {
+    suspend:{ title:'Suspend User',  body:'User will be suspended and cannot login until restored.', cls:'btn-amber', lbl:'Suspend' },
+    restore:{ title:'Restore User',  body:'User will be restored and can login again.',               cls:'btn-green', lbl:'Restore' },
+    delete: { title:'Delete User',   body:'User will be permanently removed. This cannot be undone.', cls:'btn-red',   lbl:'Delete'  },
+  }[type];
+  document.getElementById('modal-title').textContent = cfg.title;
+  document.getElementById('modal-body').textContent  = cfg.body;
+  const ok = document.getElementById('modal-ok');
+  ok.className   = 'btn ' + cfg.cls;
+  ok.textContent = cfg.lbl;
+  pendingModal   = { type, uid };
+  document.getElementById('modal').classList.add('open');
+}
+function closeModal() { document.getElementById('modal').classList.remove('open'); pendingModal=null; }
+
+async function confirmModal() {
+  if (!pendingModal) return;
+  const { type, uid } = pendingModal;
+  closeModal();
+  if (type==='delete') {
+    const r = await api('DELETE', `/api/admin/contacts/${uid}`);
+    if (r.ok) { allUsers = allUsers.filter(u=>(u._id||u.id)!==uid); filterTable(); }
+    else showAlert('admin-alert','error',(r.data&&r.data.error)||'Delete failed.');
+  } else {
+    const s = type==='suspend' ? 'suspended' : 'active';
+    allUsers = allUsers.map(u => (u._id||u.id)===uid ? {...u,status:s} : u);
+    filterTable();
+  }
+}
+
+/* ─── EXPORT CSV ─────────────────────────────────────── */
+function exportCSV() {
+  const h = ['ID','Name','Role','Phone','Email','State','District','Village','Status','Registered'];
+  const rows = allUsers.map(u=>[u._id||u.id,u.name,u.role,u.phone,u.email||'',u.state,u.district,u.village||'',u.status,
+    u.createdAt?new Date(u.createdAt).toLocaleDateString('en-IN'):''
+  ]);
+  const csv = [h,...rows].map(r=>r.map(c=>`"${String(c||'').replace(/"/g,'""')}"`).join(',')).join('\n');
+  Object.assign(document.createElement('a'),{
+    href:'data:text/csv,'+encodeURIComponent(csv),
+    download:'kisanmitra_users_'+new Date().toISOString().slice(0,10)+'.csv'
+  }).click();
+}
+
+/* ─── UTILS ──────────────────────────────────────────── */
+function val(id)  { return (document.getElementById(id)?.value||'').trim(); }
+function clearAlert(id) { const e=document.getElementById(id); if(e) e.innerHTML=''; }
+function showAlert(id, type, msg) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.innerHTML = `<div class="alert alert-${type}">${msg}</div>`;
+  if (type!=='success') setTimeout(()=>el.innerHTML='', 7000);
+}
+function setBusy(id, on, label) {
+  const b = document.getElementById(id);
+  if (!b) return;
+  b.disabled = on;
+  b.innerHTML = on ? '<span class="spin"></span> '+label : label;
+}
+</script>
+</body>
+</html>
