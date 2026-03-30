@@ -102,7 +102,7 @@ tr:hover td { background:var(--gray-light); }
 <body>
 
 <nav>
-  <a class="nav-brand" href="https://kisanmitra-2.onrender.com/">🌱 KisanMitra</a>
+  <a class="nav-brand" href="https://kisanmitra-2.onrender.com/" target="_blank">🌱 KisanMitra</a>
   <div class="nav-tabs">
     <button class="nav-tab active" id="tab-home"      onclick="go('home')">🏠 <span class="lbl">Home</span></button>
     <button class="nav-tab"        id="tab-register"  onclick="go('register')">📝 <span class="lbl">Register</span></button>
@@ -121,7 +121,7 @@ tr:hover td { background:var(--gray-light); }
     <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
       <button class="btn btn-green" onclick="go('register')">👨‍🌾 Register Now</button>
       <button class="btn btn-amber" onclick="go('login')">🔑 Login</button>
-      <a href="https://kisanmitra-2.onrender.com/" class="btn btn-outline">🌐 Open App</a>
+      <a href="https://kisanmitra-2.onrender.com/" target="_blank" class="btn btn-outline">🌐 Open App</a>
     </div>
   </div>
   <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;">
@@ -241,8 +241,8 @@ tr:hover td { background:var(--gray-light); }
     <div class="card">
       <p style="font-size:14px;font-weight:700;margin-bottom:14px">Quick Access</p>
       <div style="display:flex;flex-direction:column;gap:10px">
-        <a href="https://kisanmitra-2.onrender.com/" class="btn btn-green" style="text-align:center;justify-content:center;">🌱 Go to KisanMitra Dashboard →</a>
-        <p style="font-size:12px;color:var(--text-muted);margin-top:6px;">You are logged in. Click above to open the main app — your name and profile will be loaded automatically.</p>
+        <a href="https://kisanmitra-2.onrender.com/" target="_blank" class="btn btn-green">🌱 Open KisanMitra App</a>
+        <p style="font-size:12px;color:var(--text-muted)">Your account is registered. Use the main app to access mandi prices, weather & AI assistant.</p>
       </div>
     </div>
   </div>
@@ -326,35 +326,30 @@ async function api(method, path, body) {
   }
 }
 
-/* ─── LOCAL USER DB (fallback when server auth isn't deployed) ──────── */
-const LocalDB = {
-  getUsers() { try { return JSON.parse(localStorage.getItem('km_local_users') || '[]'); } catch { return []; } },
-  saveUsers(u) { localStorage.setItem('km_local_users', JSON.stringify(u)); },
-  findUser(phone, email) {
-    return this.getUsers().find(u => (phone && u.phone === phone) || (email && u.email === email));
-  },
-  addUser(u) { const users = this.getUsers(); users.push(u); this.saveUsers(users); return u; },
-  getAll() { return this.getUsers().filter(u => u.role !== 'admin'); }
-};
-
 /* ─── INIT: restore session ──────────────────────────── */
 (async () => {
-  // First try cached user (works offline)
   const cached = Store.getUser();
+  const token  = Store.getToken();
+  if (!token) return;
+
+  // Show cached user instantly (fast UX, no waiting for server)
   if (cached) {
     currentUser = cached;
     afterLogin(false);
-    // Then verify with server in background
-    if (Store.getToken()) {
-      const r = await api('GET', '/api/auth/me');
-      if (r.ok && r.data && r.data.user) {
-        currentUser = r.data.user;
-        Store.setUser(currentUser);
-      }
-    }
-    return;
   }
-  // No cached user — start fresh
+
+  // Verify with server in background
+  const r = await api('GET', '/api/auth/me');
+  if (r.ok && r.data && r.data.user) {
+    currentUser = r.data.user;
+    Store.setUser(currentUser);
+    afterLogin(false); // re-apply in case role changed
+  } else if (r.status === 401) {
+    // Token expired — clear and go to home
+    Store.clear();
+    if (!cached) go('home');
+  }
+  // If server unreachable (status 0), keep showing cached user silently
 })();
 
 /* ─── NAV ────────────────────────────────────────────── */
@@ -425,34 +420,15 @@ async function doRegister() {
     body.interestedCrops = val('r-interested');
   }
 
-  // Check for duplicate locally first
-  if (LocalDB.findUser(phone, email)) {
-    return showAlert('reg-alert','error','This mobile number or email is already registered. Please login.');
-  }
-
   setBusy('reg-btn', true, 'Registering...');
   const r = await api('POST', '/api/auth/register', body);
   setBusy('reg-btn', false, 'Create Account');
 
   if (r.ok && r.data && r.data.token) {
-    // Server registration succeeded
     Store.setToken(r.data.token);
     Store.setUser(r.data.user);
-    LocalDB.addUser({...body, _id: r.data.user._id || r.data.user.id || 'u_'+Date.now(), status:'active', createdAt: new Date().toISOString()});
     currentUser = r.data.user;
     showAlert('reg-alert','success','✅ Account created! Opening KisanMitra...');
-    setTimeout(() => { window.location.href = 'https://kisanmitra-2.onrender.com/'; }, 1200);
-  } else if (r.status === 0 || r.status === 500 || r.status === 404) {
-    // Server unreachable — save locally so user can still use app
-    const localUser = {
-      ...body, _id: 'local_'+Date.now(), id: 'local_'+Date.now(),
-      status:'active', createdAt: new Date().toISOString(), token: 'local_token'
-    };
-    LocalDB.addUser(localUser);
-    Store.setUser(localUser);
-    Store.setToken('local_' + Date.now());
-    currentUser = localUser;
-    showAlert('reg-alert','success','✅ Account created (offline mode)! Opening KisanMitra...');
     setTimeout(() => { window.location.href = 'https://kisanmitra-2.onrender.com/'; }, 1200);
   } else {
     const msg = (r.data && (r.data.error || r.data.message)) || 'Registration failed. Please try again.';
@@ -465,37 +441,32 @@ async function doLogin() {
   clearAlert('login-alert');
   const id   = val('l-id');
   const pass = val('l-pass');
-  if (!id || !pass) return showAlert('login-alert','error','Please enter your mobile/email and password.');
+  if (!id || !pass) return showAlert('login-alert','error','Please enter your mobile number/email and password.');
+  if (pass.length < 6) return showAlert('login-alert','error','Password must be at least 6 characters.');
 
+  // Build login body — send phone AND email so server can match either
   const body = { password: pass };
-  if (/^\d+$/.test(id)) body.phone = id;
-  else                   body.email = id;
+  const digitsOnly = id.replace(/\D/g,'');
+  if (digitsOnly.length === 10) body.phone = digitsOnly;
+  if (id.includes('@')) body.email = id.toLowerCase().trim();
+  if (!body.phone && !body.email) body.phone = id.trim();
 
   setBusy('login-btn', true, 'Logging in...');
   const r = await api('POST', '/api/auth/login', body);
   setBusy('login-btn', false, 'Login');
 
   if (r.ok && r.data && r.data.token) {
-    // Server login succeeded
     Store.setToken(r.data.token);
     Store.setUser(r.data.user);
     currentUser = r.data.user;
     showAlert('login-alert','success','✅ Login successful! Opening KisanMitra...');
     setTimeout(() => { window.location.href = 'https://kisanmitra-2.onrender.com/'; }, 900);
-  } else if (r.status === 0 || r.status === 500 || r.status === 404) {
-    // Server down — check local users
-    const localUser = LocalDB.findUser(body.phone, body.email);
-    if (localUser && localUser.password === body.password) {
-      Store.setUser(localUser);
-      Store.setToken('local_' + Date.now());
-      currentUser = localUser;
-      showAlert('login-alert','success','✅ Login successful (offline mode)! Opening KisanMitra...');
-      setTimeout(() => { window.location.href = 'https://kisanmitra-2.onrender.com/'; }, 900);
-    } else {
-      showAlert('login-alert','error', 'Server is unreachable and no local account found. Please check your connection.');
-    }
+  } else if (r.status === 401) {
+    showAlert('login-alert','error','❌ Incorrect mobile number or password. Please try again.');
+  } else if (r.status === 0 || r.status >= 500) {
+    showAlert('login-alert','error','⚠️ Server is temporarily offline. Please try again in a moment.');
   } else {
-    const msg = (r.data && (r.data.error || r.data.message)) || 'Invalid credentials. Please try again.';
+    const msg = (r.data && (r.data.error || r.data.message)) || 'Login failed. Please try again.';
     showAlert('login-alert','error', msg);
   }
 }
@@ -503,15 +474,18 @@ async function doLogin() {
 async function adminLoginPrompt() {
   const pass = prompt('Enter admin password:');
   if (pass === null || pass === '') return;
-  const r = await api('POST', '/api/auth/login', { phone:'admin', password:pass });
+  setBusy('login-btn', true, 'Verifying...');
+  const r = await api('POST', '/api/auth/login', { phone: 'admin', password: pass });
+  setBusy('login-btn', false, 'Login');
   if (r.ok && r.data && r.data.token) {
     Store.setToken(r.data.token);
     Store.setUser(r.data.user);
     currentUser = r.data.user;
-    showAlert('login-alert','success','✅ Login successful! Opening KisanMitra...');
-    setTimeout(() => { window.location.href = 'https://kisanmitra-2.onrender.com/'; }, 900);
+    afterLogin(true);
+  } else if (r.status === 0 || r.status >= 500) {
+    showAlert('login-alert','error','⚠️ Server is offline. Please try again shortly.');
   } else {
-    alert('Wrong admin password or server error.');
+    showAlert('login-alert','error','❌ Wrong admin password.');
   }
 }
 
@@ -553,14 +527,9 @@ async function loadAdminUsers() {
   if (r.ok) {
     const raw = r.data;
     allUsers = (Array.isArray(raw) ? raw : (raw.users || raw.contacts || [])).filter(u => u.role !== 'admin');
-    // Merge any local-only users
-    const serverIds = new Set(allUsers.map(u => u.phone));
-    LocalDB.getAll().forEach(u => { if (!serverIds.has(u.phone)) allUsers.push(u); });
   } else {
-    // Fall back to local users
-    allUsers = LocalDB.getAll();
-    if (allUsers.length) showAlert('admin-alert','info','Showing locally stored users (server offline).');
-    else showAlert('admin-alert','error', (r.data && r.data.error) || 'Could not load users from server.');
+    allUsers = [];
+    showAlert('admin-alert','error', (r.data && r.data.error) || 'Could not load users. Make sure you are logged in as admin.');
   }
   filterTable();
 }
