@@ -1,15 +1,6 @@
 {
-  "name": "kisanmitra-server",
-  "version": "1.0.0",
-  "description": "Backend server for KisanMitra - AI-powered platform for Indian farmers",
-  "main": "server.js",
-  "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js"
-  },
-  "engines": {
-    "node": ">=18.0.0"
-  },
-  "keywords": ["kisanmitra", "farmer", "india", "agriculture", "ai"],
-  "license": "MIT"
+  "dependencies": {
+    "mongodb": "^4.17.2",
+    "mongoose": "^8.0.0"
+  }
 }
