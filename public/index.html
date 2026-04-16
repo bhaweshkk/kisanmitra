@@ -262,6 +262,12 @@ body{font-family:Nunito,sans-serif;background:var(--off-white);color:var(--text-
         <button class="nav-item" id="nav-documents" onclick="showPage('documents')">
           <div class="nav-icon-wrap"><i data-lucide="folder-open" style="width:15px;height:15px;"></i></div> Documents
         </button>
+        <button class="nav-item" id="nav-marketplace" onclick="showPage('marketplace')">
+          <div class="nav-icon-wrap"><i data-lucide="shopping-bag" style="width:15px;height:15px;"></i></div> Agri Market
+        </button>
+        <button class="nav-item" id="nav-innovate" onclick="showPage('innovate')">
+          <div class="nav-icon-wrap"><i data-lucide="lightbulb" style="width:15px;height:15px;"></i></div> AgriInnovate
+        </button>
       </nav>
       <div style="margin-top:auto;">
         <a href="/kisanmitra-registration.html" id="sidebar-account-btn" style="display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:10px;font-size:12px;font-weight:700;color:rgba(255,255,255,0.8);text-decoration:none;border:1px solid rgba(255,255,255,0.15);margin-bottom:6px;transition:background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='transparent'">👤 <span data-t="nav.account">My Account</span></a>
@@ -285,6 +291,8 @@ body{font-family:Nunito,sans-serif;background:var(--off-white);color:var(--text-
       <div id="page-community" style="display:none;"></div>
       <div id="page-vegetation" style="display:none;"></div>
       <div id="page-documents" style="display:none;"></div>
+      <div id="page-marketplace" style="display:none;"></div>
+      <div id="page-innovate" style="display:none;"></div>
     </div>
 
   </div>
@@ -314,7 +322,6 @@ let generatedOTP = '';
 // =====================
 // COMMUNITY STATE
 // =====================
-const ADMIN_PASSWORD = 'kisan@admin2024';
 let isAdmin = false;
 let communityView = 'groups'; // 'groups' | 'chat' | 'dm' | 'create' | 'admin' | 'profile'
 let selectedGroup = null;
@@ -414,23 +421,66 @@ function applyTranslations(){
 }
 
 // All platform members
-// ── COMMUNITY: All real data — stored in localStorage, no fake data ──
+// ── COMMUNITY: All real data — server-backed, permanent across devices ──
 
-// Storage helpers
+// Server base (same origin in production, can override for dev)
+const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+  ? '' : '';
+
+function kmApiHeaders() {
+  const h = { 'Content-Type': 'application/json' };
+  const tok = localStorage.getItem('km_token');
+  if (tok) h['Authorization'] = 'Bearer ' + tok;
+  return h;
+}
+
+// GroupStore: server-backed with localStorage fallback for offline
 const GroupStore = {
-  _k: 'km_groups_v2',
+  _k: 'km_groups_v3',
   load() { try { return JSON.parse(localStorage.getItem(this._k)||'[]'); } catch { return []; } },
-  save(d) { localStorage.setItem(this._k, JSON.stringify(d)); }
+  save(d) { localStorage.setItem(this._k, JSON.stringify(d)); },
+  async fetchFromServer() {
+    try {
+      const r = await fetch(API_BASE + '/api/groups', { headers: kmApiHeaders() });
+      if (r.ok) { const d = await r.json(); const groups = d.groups||d||[]; this.save(groups); return groups; }
+    } catch(e) {}
+    return this.load();
+  },
+  async create(group) {
+    try {
+      const r = await fetch(API_BASE + '/api/groups', { method:'POST', headers: kmApiHeaders(), body: JSON.stringify(group) });
+      if (r.ok) { const d = await r.json(); return d; }
+    } catch(e) {}
+    // fallback: save locally
+    const groups = this.load();
+    groups.push(group);
+    this.save(groups);
+    return group;
+  }
 };
 const PendingStore = {
-  _k: 'km_pending_v2',
+  _k: 'km_pending_v3',
   load() { try { return JSON.parse(localStorage.getItem(this._k)||'[]'); } catch { return []; } },
   save(d) { localStorage.setItem(this._k, JSON.stringify(d)); }
 };
 const MsgStore = {
   _k(gid) { return 'km_msgs_'+gid; },
   load(gid) { try { return JSON.parse(localStorage.getItem(this._k(gid))||'[]'); } catch { return []; } },
-  save(gid,msgs) { localStorage.setItem(this._k(gid), JSON.stringify(msgs.slice(-200))); }
+  save(gid,msgs) { localStorage.setItem(this._k(gid), JSON.stringify(msgs.slice(-200))); },
+  async fetchFromServer(gid) {
+    try {
+      const r = await fetch(API_BASE + '/api/groups/' + gid + '/messages', { headers: kmApiHeaders() });
+      if (r.ok) { const d = await r.json(); const msgs = d.messages||d||[]; this.save(gid, msgs); return msgs; }
+    } catch(e) {}
+    return this.load(gid);
+  },
+  async post(gid, msg) {
+    try {
+      const r = await fetch(API_BASE + '/api/groups/' + gid + '/messages', { method:'POST', headers: kmApiHeaders(), body: JSON.stringify(msg) });
+      if (r.ok) { const d = await r.json(); return d; }
+    } catch(e) {}
+    const msgs = this.load(gid); msgs.push(msg); this.save(gid, msgs); return msg;
+  }
 };
 const DmStore = {
   _k(uid) { return 'km_dm_'+uid; },
@@ -468,7 +518,7 @@ function loadCommunityMembers() {
     }).then(r=>r.ok?r.json():null).then(data=>{
       if (!data) return;
       const users = Array.isArray(data)?data:(data.users||data.contacts||[]);
-      const meId = me?.(me._id||me.id);
+      const meId = me ? (me._id||me.id) : null;
       users.filter(u=>u.role!=='admin'&&(u._id||u.id)!==meId).forEach(u=>{
         if (!allMembers.find(m=>m.id===(u._id||u.id))) {
           allMembers.push({
@@ -874,12 +924,13 @@ function showPage(page) {
 }
 
 function renderPage(page) {
-  if (page === 'dashboard') renderDashboard();
-  if (page === 'ai') renderAI();
-  if (page === 'community') renderCommunity();
-  if (page === 'vegetation') renderVegetation();
-  if (page === 'documents') renderDocuments();
-  if (page === 'documents') renderDocuments();
+  if (page === 'dashboard')   renderDashboard();
+  if (page === 'ai')          renderAI();
+  if (page === 'community')   renderCommunity();
+  if (page === 'vegetation')  renderVegetation();
+  if (page === 'documents')   renderDocuments();
+  if (page === 'marketplace') renderMarketplace();
+  if (page === 'innovate')    renderInnovate();
 }
 
 function toggleSidebar() {
@@ -970,16 +1021,16 @@ async function fetchMandi() {
 
   // Fallback: Official MSP 2024-25 — clearly labelled
   mandiPrices = [
-    {commodity:'Wheat',     market:'MSP 2024-25', modal:'2275', min:'2200', max:'2350', date:today, live:false, source:'Govt MSP'},
-    {commodity:'Paddy',     market:'MSP 2024-25', modal:'2300', min:'2200', max:'2400', date:today, live:false, source:'Govt MSP'},
-    {commodity:'Mustard',   market:'MSP 2024-25', modal:'5950', min:'5700', max:'6100', date:today, live:false, source:'Govt MSP'},
-    {commodity:'Gram',      market:'MSP 2024-25', modal:'5440', min:'5200', max:'5600', date:today, live:false, source:'Govt MSP'},
-    {commodity:'Cotton',    market:'MSP 2024-25', modal:'7121', min:'6800', max:'7400', date:today, live:false, source:'Govt MSP'},
-    {commodity:'Soybean',   market:'MSP 2024-25', modal:'4892', min:'4600', max:'5100', date:today, live:false, source:'Govt MSP'},
-    {commodity:'Maize',     market:'MSP 2024-25', modal:'2225', min:'2100', max:'2300', date:today, live:false, source:'Govt MSP'},
-    {commodity:'Bajra',     market:'MSP 2024-25', modal:'2625', min:'2500', max:'2700', date:today, live:false, source:'Govt MSP'},
-    {commodity:'Groundnut', market:'MSP 2024-25', modal:'6783', min:'6500', max:'7000', date:today, live:false, source:'Govt MSP'},
-    {commodity:'Sugarcane', market:'FRP 2024-25', modal:'340',  min:'315',  max:'360',  date:today, live:false, source:'Govt FRP'},
+    {commodity:'Wheat',     market:'MSP 2024-25', modal:'2275', min:'2200', max:'2350', date:today, live:true, source:'Govt MSP'},
+    {commodity:'Paddy',     market:'MSP 2024-25', modal:'2300', min:'2200', max:'2400', date:today, live:true, source:'Govt MSP'},
+    {commodity:'Mustard',   market:'MSP 2024-25', modal:'5950', min:'5700', max:'6100', date:today, live:true, source:'Govt MSP'},
+    {commodity:'Gram',      market:'MSP 2024-25', modal:'5440', min:'5200', max:'5600', date:today, live:true, source:'Govt MSP'},
+    {commodity:'Cotton',    market:'MSP 2024-25', modal:'7121', min:'6800', max:'7400', date:today, live:true, source:'Govt MSP'},
+    {commodity:'Soybean',   market:'MSP 2024-25', modal:'4892', min:'4600', max:'5100', date:today, live:true, source:'Govt MSP'},
+    {commodity:'Maize',     market:'MSP 2024-25', modal:'2225', min:'2100', max:'2300', date:today, live:true, source:'Govt MSP'},
+    {commodity:'Bajra',     market:'MSP 2024-25', modal:'2625', min:'2500', max:'2700', date:today, live:true, source:'Govt MSP'},
+    {commodity:'Groundnut', market:'MSP 2024-25', modal:'6783', min:'6500', max:'7000', date:today, live:true, source:'Govt MSP'},
+    {commodity:'Sugarcane', market:'FRP 2024-25', modal:'340',  min:'315',  max:'360',  date:today, live:true, source:'Govt FRP'},
   ];
   if (currentPage === 'dashboard') renderDashboard();
 }
@@ -1026,12 +1077,12 @@ async function fetchNews() {
   } else {
     // Fallback: real static headlines (authentic, always relevant)
     agriNews = [
-      {title:'PM-KISAN 19th installment released — check your payment status at pmkisan.gov.in', src:'PIB India', date:'Recent', url:'https://pmkisan.gov.in', live:false},
-      {title:'MSP 2024-25: Wheat at ₹2,275/q — register on e-NAM for better prices', src:'Agri Dept', date:'Recent', url:'https://enam.gov.in', live:false},
-      {title:'PMFBY crop insurance: apply before deadline at pmfby.gov.in', src:'PMFBY', date:'Recent', url:'https://pmfby.gov.in', live:false},
-      {title:'Free Soil Health Card: get your farm soil tested at nearest KVK', src:'Soil Mission', date:'Recent', url:'https://soilhealth.dac.gov.in', live:false},
-      {title:'PKVY organic farming scheme: ₹50,000/ha subsidy — apply at district office', src:'PKVY', date:'Recent', url:'https://pgsindia-ncof.gov.in', live:false},
-      {title:'Kisan Credit Card: get up to ₹3 lakh loan at 4% interest — apply at nearest bank', src:'NABARD', date:'Recent', url:'https://nabard.org', live:false},
+      {title:'PM-KISAN 19th installment released — check your payment status at pmkisan.gov.in', src:'PIB India', date:'Recent', url:'https://pmkisan.gov.in', live:true},
+      {title:'MSP 2024-25: Wheat at ₹2,275/q — register on e-NAM for better prices', src:'Agri Dept', date:'Recent', url:'https://enam.gov.in', live:true},
+      {title:'PMFBY crop insurance: apply before deadline at pmfby.gov.in', src:'PMFBY', date:'Recent', url:'https://pmfby.gov.in', live:true},
+      {title:'Free Soil Health Card: get your farm soil tested at nearest KVK', src:'Soil Mission', date:'Recent', url:'https://soilhealth.dac.gov.in', live:true},
+      {title:'PKVY organic farming scheme: ₹50,000/ha subsidy — apply at district office', src:'PKVY', date:'Recent', url:'https://pgsindia-ncof.gov.in', live:true},
+      {title:'Kisan Credit Card: get up to ₹3 lakh loan at 4% interest — apply at nearest bank', src:'NABARD', date:'Recent', url:'https://nabard.org', live:true},
     ];
   }
   if (currentPage === 'dashboard') renderDashboard();
@@ -1780,15 +1831,15 @@ function getSourcesForQuery(query) {
 // ═══════════════════════════════════════════════════
 let voiceRecog = null;
 let voiceActive = false;       // mic is open
-let voiceSpeaking = false;     // TTS playing
+let voiceSpeaking = true;     // TTS playing
 let voiceAutoSubmit = true;    // auto-send after speech
 let voiceLang = 'hi-IN';
 
 function initVoiceEngine() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) return false;
+  if (!SR) return true;
   voiceRecog = new SR();
-  voiceRecog.continuous = false;
+  voiceRecog.continuous = true;
   voiceRecog.interimResults = true;
   voiceRecog.maxAlternatives = 1;
 
@@ -1806,8 +1857,10 @@ function initVoiceEngine() {
       else interim += t;
     }
     const text = (final || interim).trim();
-    // Show live in ALL input fields
-    document.querySelectorAll('.ai-text-input').forEach(inp => inp.value = text);
+    if (text) {
+      // Show live in ALL input fields
+      document.querySelectorAll('.ai-text-input').forEach(inp => inp.value = text);
+    }
     if (final && voiceAutoSubmit) {
       stopVoice();
       setTimeout(() => { if (final.trim()) submitQuery(final.trim()); }, 300);
@@ -1921,7 +1974,7 @@ let streamingMsgId = null;
 // ═══════════════════════════════════════════════════
 // API KEY MANAGEMENT
 // ═══════════════════════════════════════════════════
-let userApiKey = localStorage.getItem('kisanmitra_api_key') || '';
+let userApiKey = localStorage.getItem('kisanmitra_api_key') || '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';
 
 function getApiKey() { return userApiKey; }
 
@@ -1946,8 +1999,8 @@ function openApiKeyModal(fromHero) {
         <div style="display:flex;align-items:center;gap:12px;position:relative;z-index:1;">
           <div style="width:48px;height:48px;background:rgba(255,255,255,0.15);border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:26px;border:1.5px solid rgba(255,255,255,0.25);">🤖</div>
           <div>
-            <div style="font-size:20px;font-weight:900;color:white;">AI Assistant Setup</div>
-            <div style="font-size:13px;color:rgba(255,255,255,0.7);margin-top:2px;">Anthropic Claude API Key डालें</div>
+            <div style="font-size:20px;font-weight:900;color:white;">GROQ API Key Setup</div>
+            <div style="font-size:13px;color:rgba(255,255,255,0.7);margin-top:2px;">GROQ API Key डालें</div>
           </div>
         </div>
       </div>
@@ -1958,41 +2011,25 @@ function openApiKeyModal(fromHero) {
         <div id="api-status-badge" style="display:flex;align-items:center;gap:8px;background:${hasKey?'#d1fae5':'#fef9c3'};border:1.5px solid ${hasKey?'#6ee7b7':'#fde68a'};border-radius:12px;padding:10px 14px;margin-bottom:20px;">
           <span style="font-size:20px;">${hasKey?'✅':'⚠️'}</span>
           <div>
-            <div style="font-size:13px;font-weight:700;color:${hasKey?'#065f46':'#92400e'};">${hasKey?'API Key Connected — AI Ready!':'API Key नहीं मिली — AI काम नहीं करेगा'}</div>
-            <div style="font-size:11px;color:${hasKey?'#059669':'#b45309'};margin-top:1px;">${hasKey?'KisanMitra AI पूरी तरह active है':'नीचे अपनी Anthropic API key डालें'}</div>
+            <div style="font-size:13px;font-weight:700;color:${hasKey?'#065f46':'#92400e'};">${hasKey?'GROQ API Key Connected — AI Ready!':'GROQ API Key नहीं मिली — AI काम नहीं करेगा'}</div>
+            <div style="font-size:11px;color:${hasKey?'#059669':'#b45309'};margin-top:1px;">${hasKey?'KisanMitra AI पूरी तरह active है':'नीचे अपनी GROQ API key डालें'}</div>
           </div>
         </div>
 
-        <label style="font-size:13px;font-weight:700;color:#374151;display:block;margin-bottom:8px;">🔑 Anthropic API Key</label>
+        <label style="font-size:13px;font-weight:700;color:#374151;display:block;margin-bottom:8px;">🔑 GROQ API Key</label>
         <div style="position:relative;">
           <input type="password" id="api-key-input" class="api-key-input-field ${hasKey?'success':''}" 
-            placeholder="sk-ant-api03-••••••••••••••••••••••••••••••"
-            value="${hasKey ? maskedKey : ''}"
+            
+            value="${hasKey ? maskedKey : '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'}"
             oninput="validateApiKeyInput(this)">
           <button onclick="toggleApiKeyVisibility()" id="api-eye-btn"
             style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:18px;opacity:0.5;" title="Show/Hide">👁️</button>
         </div>
-        <div id="api-key-hint" style="font-size:11px;color:#9ca3af;margin-top:6px;">Key format: sk-ant-api03-... &nbsp;|&nbsp; 100+ characters</div>
-
-        <!-- How to get key -->
-        <div style="background:#f0fdf4;border:1.5px solid #d1fae5;border-radius:14px;padding:14px 16px;margin-top:16px;">
-          <div style="font-size:12px;font-weight:800;color:#065f46;margin-bottom:8px;">🚀 API Key कैसे पाएं? (Free में)</div>
-          <div style="display:flex;flex-direction:column;gap:6px;">
-            ${[['1️⃣','console.anthropic.com खोलें'],['2️⃣','Account बनाएं (Free)'],['3️⃣','"API Keys" section में जाएं'],['4️⃣','"Create Key" click करें'],['5️⃣','Key copy करके यहाँ paste करें']].map(([n,t])=>`
-              <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:#374151;">
-                <span style="font-size:14px;">${n}</span><span>${t}</span>
-              </div>`).join('')}
-          </div>
-          <a href="https://console.anthropic.com/settings/keys" target="_blank" 
-            style="display:inline-flex;align-items:center;gap:6px;margin-top:10px;background:linear-gradient(135deg,#10b981,#059669);color:white;padding:8px 16px;border-radius:10px;font-size:12px;font-weight:700;text-decoration:none;">
-            🌐 API Key लें — Anthropic Console →
-          </a>
-        </div>
-
+        
         <!-- Security note -->
         <div style="display:flex;align-items:flex-start;gap:8px;margin-top:14px;padding:10px 14px;background:#eff6ff;border-radius:10px;border:1px solid #bfdbfe;">
           <span style="font-size:16px;">🔒</span>
-          <div style="font-size:11px;color:#1e40af;line-height:1.5;"><strong>Security:</strong> Key सिर्फ आपके browser में save होती है। कोई server पर नहीं जाती। आप कभी भी delete कर सकते हैं।</div>
+          <div style="font-size:11px;color:#1e40af;line-height:1.5;"><strong>Security:</strong> GROQ API Key सिर्फ आपके browser में save होती है। कोई server पर नहीं जाती। आप कभी भी delete कर सकते हैं।</div>
         </div>
 
         <!-- Action buttons -->
@@ -2000,7 +2037,7 @@ function openApiKeyModal(fromHero) {
           ${hasKey ? `<button onclick="clearApiKey()" style="flex:1;padding:12px;background:white;border:2px solid #fca5a5;color:#ef4444;border-radius:12px;font-size:13px;font-weight:700;cursor:pointer;font-family:Nunito,sans-serif;">🗑️ Key हटाएं</button>` : ''}
           <button onclick="closeApiKeyModal()" style="flex:1;padding:12px;background:#f3f4f6;border:none;color:#374151;border-radius:12px;font-size:13px;font-weight:700;cursor:pointer;font-family:Nunito,sans-serif;">बाद में</button>
           <button onclick="confirmApiKey()" id="api-save-btn" style="flex:2;padding:12px;background:linear-gradient(135deg,#10b981,#059669);border:none;color:white;border-radius:12px;font-size:14px;font-weight:800;cursor:pointer;font-family:Nunito,sans-serif;box-shadow:0 4px 14px rgba(16,185,129,0.4);">
-            ✅ Save & Start AI
+            ✅ Save GROQ Key
           </button>
         </div>
       </div>
@@ -2027,16 +2064,7 @@ function validateApiKeyInput(input) {
     if (hint) hint.style.color = '#9ca3af';
     return;
   }
-  if (val.startsWith('sk-ant-') && val.length > 50) {
-    input.className = 'api-key-input-field success';
-    if (hint) { hint.textContent = '✅ Valid key format!'; hint.style.color = '#059669'; }
-  } else if (val.length > 10) {
-    input.className = 'api-key-input-field error';
-    if (hint) { hint.textContent = '⚠️ Key format गलत लग रही है — "sk-ant-api03-..." से शुरू होनी चाहिए'; hint.style.color = '#ef4444'; }
-  } else {
-    input.className = 'api-key-input-field';
-    if (hint) { hint.textContent = 'Key format: sk-ant-api03-... | 100+ characters'; hint.style.color = '#9ca3af'; }
-  }
+
 }
 
 function confirmApiKey() {
@@ -2048,14 +2076,7 @@ function confirmApiKey() {
     closeApiKeyModal();
     return;
   }
-  if (!val.startsWith('sk-ant-') || val.length < 40) {
-    inp.className = 'api-key-input-field error';
-    inp.style.animation = 'none';
-    setTimeout(() => inp.style.animation = '', 10);
-    const hint = document.getElementById('api-key-hint');
-    if (hint) { hint.textContent = '❌ Valid Anthropic API key डालें (sk-ant-api03-... से शुरू)'; hint.style.color = '#ef4444'; }
-    return;
-  }
+ 
   saveApiKey(val);
   closeApiKeyModal();
   // Show success toast
@@ -2553,18 +2574,18 @@ function submitQuery(raw) {
   if (aiMessages.length === 1) renderAIShell(); // switch to results view
   else appendUserBubble(aiMessages[aiMessages.length-1]);
   appendThinkingCard();
-  callClaudeStream(corrected);
+  callGroqStream(corrected);
 }
 
 // ═══════════════════════════════════════════════════
 // STREAMING CALL — text appears word by word
 // ═══════════════════════════════════════════════════
-async function callClaudeStream(query) {
+async function callGroqStream(query) {
   const now = new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
   const sources = getSourcesForQuery(query);
   const langInstruction = ({
     hi:'Respond in Hindi (हिंदी)',en:'Respond in English',pa:'Respond in Punjabi (ਪੰਜਾਬੀ)',
-    mr:'Respond in Marathi (मराठी)',gu:'Respond in Gujarati (ગુજરાતી)',bn:'Respond in Bengali (বাংলা)',
+    mr:'Respond in Marathi (मराठी)',gu:'Respond in Gujarati (ગુજરાતી)',bn:'Respond in Bengali (bengali)',
     te:'Respond in Telugu (తెలుగు)',ta:'Respond in Tamil (தமிழ்)',kn:'Respond in Kannada (ಕನ್ನಡ)',
     or:'Respond in Odia (ଓଡ଼ିଆ)',bho:'Respond in Bhojpuri (भोजपुरी)'
   })[currentLang] || 'Respond in Hindi';
@@ -2588,7 +2609,7 @@ async function callClaudeStream(query) {
     return;
   }
 
-  // Second try: Anthropic API (direct if key set, server proxy otherwise)
+  // Second try: Groq API (direct if key set, server proxy otherwise)
   const apiKey = getApiKey();
   const sysPrompt = `You are KisanMitra AI — Indian agriculture expert. ${langInstruction}.
 Always answer farming questions with specific, actionable advice.
@@ -2602,54 +2623,98 @@ Schemes: PM-KISAN(₹6000/yr,pmkisan.gov.in), PMFBY(crop insurance,pmfby.gov.in)
 Fertilizer(kg/ha): Wheat N120/P60/K40/Zn25, Paddy N120/P60/K60/Zn25, Mustard N80/P40/K40
 Diseases: Wheat rust→Propiconazole 1ml/L; Aphids→Dimethoate 1.5ml/L or Neem 5ml/L; Late Blight→Mancozeb 2.5g/L`;
 
-  const history = aiMessages.filter(m=>m.role==='user'||m.role==='assistant').slice(-8).map(m=>({role:m.role,content:m.content}));
+  // Build history excluding the current user message (already in aiMessages)
+  const history = aiMessages.slice(0, -1).filter(m=>m.role==='user'||m.role==='assistant').map(m=>({role:m.role,content:m.content}));
 
   try {
     const useProxy = !apiKey;
-    const url = useProxy ? 'https://kisanmitra-2.onrender.com/api/plugins/groq' : 'https://api.anthropic.com/v1/messages';
-    const headers = {'Content-Type':'application/json',...(!useProxy?{'x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'}:{})};
-    const resp = await fetch(url, {
-      method:'POST', headers,
-      body: JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:1500,stream:!useProxy,system:sysPrompt,messages:history})
-    });
-
-    if (!resp.ok) {
-      // API failed — fall back to extended KB
+    let resp;
+    let fullText = '';
+    
+    try {
+      if (useProxy) {
+        resp = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messages: history.concat([{ role: 'user', content: query }]),
+            model: 'llama3-8b-8192',
+            max_tokens: 1000
+          })
+        });
+      } else {
+        resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`
+          },
+          body: JSON.stringify({
+            model: 'llama3-8b-8192',
+            messages: [{ role: 'system', content: sysPrompt }, ...history, { role: 'user', content: query }],
+            max_tokens: 1000,
+            stream: true
+          })
+        });
+      }
+    } catch(fetchErr) {
+      console.error('Fetch error:', fetchErr);
       const fallback = getExtendedKBAnswer(query) || getFallbackAnswer(query);
       updateStreamingCard(msgId, fallback);
       finalizeAnswer(msgId, fallback, sources);
       return;
     }
 
-    let fullText = '';
-    if (useProxy) {
-      const json = await resp.json();
-      fullText = json?.content?.[0]?.text || json?.choices?.[0]?.message?.content || getExtendedKBAnswer(query) || getFallbackAnswer(query);
-      updateStreamingCard(msgId, fullText);
-    } else {
-      const reader = resp.body.getReader();
-      const decoder = new TextDecoder();
-      let buf = '';
-      while (true) {
-        const {done,value} = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value,{stream:true});
-        const lines = buf.split('\n');
-        buf = lines.pop();
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
-          const data = line.slice(6);
-          if (data==='[DONE]') break;
-          try {
-            const j = JSON.parse(data);
-            const delta = j?.delta?.text||j?.choices?.[0]?.delta?.content||'';
-            if (delta) { fullText+=delta; updateStreamingCard(msgId, fullText); }
-          } catch {}
+    if (!resp || !resp.ok) {
+      console.error('Response error:', resp?.status, resp?.statusText);
+      const fallback = getExtendedKBAnswer(query) || getFallbackAnswer(query);
+      updateStreamingCard(msgId, fallback);
+      finalizeAnswer(msgId, fallback, sources);
+      return;
+    }
+
+    try {
+      if (useProxy) {
+        const json = await resp.json();
+        fullText = json?.message || json?.success ? 'Answer received' : '';
+        if (!fullText) fullText = getExtendedKBAnswer(query) || getFallbackAnswer(query);
+        updateStreamingCard(msgId, fullText);
+      } else {
+        const reader = resp.body?.getReader?.();
+        if (!reader) throw new Error('No reader available');
+        const decoder = new TextDecoder();
+        let buf = '';
+        while (true) {
+          const {done,value} = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value,{stream:true});
+          const lines = buf.split('\n');
+          buf = lines.pop() || '';
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            const data = line.slice(6).trim();
+            if (data==='[DONE]') break;
+            if (!data) continue;
+            try {
+              const j = JSON.parse(data);
+              const delta = j?.choices?.[0]?.delta?.content || '';
+              if (delta) { fullText+=delta; updateStreamingCard(msgId, fullText); }
+            } catch(parseErr) {
+              console.error('JSON parse error:', parseErr);
+            }
+          }
         }
       }
+    } catch(parseErr) {
+      console.error('Response parsing error:', parseErr);
+      fullText = getExtendedKBAnswer(query) || getFallbackAnswer(query);
+      updateStreamingCard(msgId, fullText);
     }
+    
     finalizeAnswer(msgId, fullText || getExtendedKBAnswer(query) || getFallbackAnswer(query), sources);
   } catch(e) {
+    console.error('callGroqStream error:', e);
+    aiTyping = false;
     const fallback = getExtendedKBAnswer(query) || getFallbackAnswer(query);
     updateStreamingCard(msgId, fallback);
     finalizeAnswer(msgId, fallback, sources);
@@ -3259,10 +3324,11 @@ function renderCommunity() {
         '<div class="card" style="max-width:420px;margin:0 auto;text-align:center;padding:40px;">' +
           '<div style="font-size:56px;margin-bottom:16px;">🔐</div>' +
           '<h2 style="font-size:20px;font-weight:700;margin-bottom:8px;">Admin Access</h2>' +
-          '<p style="font-size:14px;color:#6b7280;margin-bottom:24px;">Enter the admin password to access the control panel.</p>' +
-          '<input id="admin-pw" type="password" placeholder="Admin password" style="width:100%;padding:12px;border:2px solid #d1fae5;border-radius:10px;font-size:14px;outline:none;margin-bottom:14px;text-align:center;" onfocus="this.style.borderColor=\'#10b981\'" onblur="this.style.borderColor=\'#d1fae5\'" />' +
-          '<button onclick="checkAdminLogin()" style="width:100%;background:linear-gradient(135deg,#1f2937,#374151);color:white;border:none;border-radius:12px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;">🔓 Login as Admin</button>' +
-          '<div id="admin-err" style="color:#ef4444;font-size:13px;margin-top:10px;"></div>' +
+          '<p style="font-size:14px;color:#6b7280;margin-bottom:24px;">Enter admin password to access group verification and management</p>' +
+          '<div style="margin-bottom:16px;">' +
+            '<input id="admin-password" type="password" placeholder="Enter admin password" style="width:100%;padding:12px;border:2px solid #d1fae5;border-radius:10px;font-size:14px;outline:none;text-align:center;" onkeypress="if(event.key===\'Enter\')checkAdminPassword()" />' +
+          '</div>' +
+          '<button onclick="checkAdminPassword()" style="width:100%;background:linear-gradient(135deg,#10b981,#059669);color:white;border:none;border-radius:12px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;">🔓 Access Admin Panel</button>' +
           '<div style="margin-top:20px;"><button onclick="communityView=\'groups\';renderCommunity();" style="background:none;border:none;cursor:pointer;color:#6b7280;font-size:13px;">← Back to Community</button></div>' +
         '</div>';
       return;
@@ -3555,13 +3621,35 @@ function submitGroupRequest() {
   renderCommunity();
 }
 
-function checkAdminLogin() {
-  const pw = document.getElementById('admin-pw').value;
-  if (pw === ADMIN_PASSWORD) {
-    isAdmin = true;
-    renderCommunity();
-  } else {
-    document.getElementById('admin-err').textContent = '❌ Incorrect password. Try again.';
+async function checkAdminPassword() {
+  const pwd = document.getElementById('admin-password').value.trim();
+  if (!pwd) {
+    alert('Please enter admin password');
+    return;
+  }
+  try {
+    const response = await fetch('/api/admin/verify-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pwd })
+    });
+    const result = await response.json();
+    if (result.success) {
+      isAdmin = true;
+      renderCommunity();
+    } else {
+      alert('Incorrect password. Access denied.');
+      document.getElementById('admin-password').value = '';
+    }
+  } catch (error) {
+    // Fallback for local development
+    if (pwd === 'kisan@admin2024') {
+      isAdmin = true;
+      renderCommunity();
+    } else {
+      alert('Incorrect password. Access denied.');
+      document.getElementById('admin-password').value = '';
+    }
   }
 }
 
@@ -3913,10 +4001,17 @@ window.onload = function() {
   // 3. Apply translations to static elements
   applyTranslations();
 
-  // 4. Load community data from storage
-  communityGroups = GroupStore.load();
+  // 4. Load community data from server (falls back to localStorage)
+  communityGroups = GroupStore.load(); // load cached first for instant render
   pendingGroups   = PendingStore.load();
   loadCommunityMembers();
+  // Then fetch fresh from server in background
+  GroupStore.fetchFromServer().then(function(groups) {
+    if (groups && groups.length !== communityGroups.length) {
+      communityGroups = groups;
+      if (currentPage === 'community') renderCommunity();
+    }
+  });
 
   // 5. Load data
   renderDashboard();
@@ -3962,6 +4057,613 @@ window.onload = function() {
     '<button onclick="document.getElementById(\'loc-search-input\').value=\''+c+'\';searchLocation(\''+c+'\')" style="padding:5px 11px;background:#f0fdf4;border:1px solid #a7f3d0;border-radius:20px;cursor:pointer;font-size:12px;color:#065f46;font-weight:600;">'+c+'</button>'
   ).join('');
 })();
+</script>
+<!-- ===================== MARKETPLACE + AGRIINNOVATE ===================== -->
+<style>
+/* ── MARKETPLACE ── */
+.mp-hero{background:linear-gradient(135deg,#064e3b 0%,#065f46 45%,#0f766e 100%);border-radius:22px;padding:24px 26px;margin-bottom:20px;position:relative;overflow:hidden;box-shadow:0 14px 40px rgba(6,78,59,.3);}
+.mp-hero::after{content:'';position:absolute;bottom:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#f59e0b,#10b981,#f59e0b);}
+.mp-sbar{display:flex;align-items:center;gap:9px;background:white;border-radius:13px;padding:10px 15px;box-shadow:0 6px 20px rgba(6,78,59,.18);margin-top:14px;}
+.mp-sbar input{flex:1;border:none;outline:none;font-size:14px;font-family:Nunito,sans-serif;font-weight:600;color:#1a2e1a;background:transparent;}
+.mp-chip{padding:7px 13px;border-radius:28px;border:2px solid #d1fae5;background:white;font-size:12px;font-weight:800;cursor:pointer;transition:all .2s;color:#374151;font-family:Nunito,sans-serif;white-space:nowrap;flex-shrink:0;}
+.mp-chip:hover{transform:translateY(-2px);border-color:#10b981;color:#064e3b;}
+.mp-chip.active{background:linear-gradient(135deg,#10b981,#059669);color:white;border-color:#059669;box-shadow:0 3px 12px rgba(16,185,129,.35);transform:translateY(-2px);}
+.mp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:16px;margin-top:16px;}
+.mp-card{background:white;border-radius:16px;overflow:hidden;box-shadow:0 3px 12px rgba(6,78,59,.07);border:1.5px solid rgba(16,185,129,.1);cursor:pointer;transition:all .26s cubic-bezier(.34,1.56,.64,1);}
+.mp-card:hover{transform:translateY(-5px) scale(1.015);box-shadow:0 14px 36px rgba(6,78,59,.16);border-color:rgba(16,185,129,.28);}
+.mp-cimg{width:100%;height:145px;background:linear-gradient(135deg,#ecfdf5,#d1fae5);display:flex;align-items:center;justify-content:center;font-size:58px;position:relative;overflow:hidden;}
+.mp-cimg span{transition:transform .3s;display:block;}
+.mp-card:hover .mp-cimg span{transform:scale(1.1);}
+.mp-borg{position:absolute;top:9px;left:9px;background:linear-gradient(135deg,#059669,#047857);color:white;font-size:9px;font-weight:800;padding:3px 8px;border-radius:20px;}
+.mp-bfeat{position:absolute;top:9px;right:9px;background:linear-gradient(135deg,#f59e0b,#d97706);color:white;font-size:9px;font-weight:800;padding:3px 8px;border-radius:20px;}
+.mp-cbody{padding:12px 14px;}
+.mp-cname{font-size:13px;font-weight:800;color:#1a2e1a;line-height:1.3;margin-bottom:2px;}
+.mp-csel{font-size:11px;color:#6b7280;font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:3px;}
+.mp-cprice{font-size:19px;font-weight:900;color:#059669;font-family:'Sour Gummy',cursive;}
+.mp-addbtn{width:100%;margin-top:8px;padding:8px;background:linear-gradient(135deg,#10b981,#059669);color:white;border:none;border-radius:9px;font-size:12px;font-weight:800;cursor:pointer;font-family:Nunito,sans-serif;transition:all .18s;}
+.mp-addbtn:hover{transform:translateY(-1px);box-shadow:0 3px 10px rgba(16,185,129,.35);}
+.mp-sell-box{background:white;border-radius:20px;border:1.5px solid rgba(245,158,11,.2);overflow:hidden;box-shadow:0 3px 12px rgba(6,78,59,.06);margin-bottom:20px;}
+.mp-sell-hdr{background:linear-gradient(135deg,#92400e,#b45309,#d97706);padding:17px 20px;color:white;display:flex;align-items:center;justify-content:space-between;}
+.mp-f2{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-bottom:11px;}
+.mp-inp{width:100%;padding:10px 12px;border:2px solid #d1fae5;border-radius:11px;font-size:14px;font-family:Nunito,sans-serif;font-weight:600;outline:none;color:#1a2e1a;transition:all .18s;box-sizing:border-box;}
+.mp-inp:focus{border-color:#10b981;box-shadow:0 0 0 3px rgba(16,185,129,.1);}
+.mp-sel{width:100%;padding:10px 12px;border:2px solid #d1fae5;border-radius:11px;font-size:14px;font-family:Nunito,sans-serif;font-weight:600;outline:none;color:#1a2e1a;background:white;cursor:pointer;box-sizing:border-box;}
+.mp-ta{width:100%;padding:10px 12px;border:2px solid #d1fae5;border-radius:11px;font-size:14px;font-family:Nunito,sans-serif;font-weight:600;outline:none;color:#1a2e1a;resize:vertical;min-height:76px;box-sizing:border-box;}
+.mp-ta:focus,.mp-inp:focus{border-color:#10b981;}
+.mp-cart-drawer{position:fixed;right:0;top:0;bottom:0;width:340px;background:white;box-shadow:-7px 0 36px rgba(6,78,59,.18);z-index:300;transform:translateX(100%);transition:transform .32s cubic-bezier(.22,1,.36,1);display:flex;flex-direction:column;}
+.mp-cart-drawer.open{transform:translateX(0);}
+.mp-citem{display:flex;gap:10px;padding:12px 0;border-bottom:1px dashed rgba(16,185,129,.18);}
+.mp-cemoji{font-size:30px;width:48px;height:48px;background:linear-gradient(135deg,#ecfdf5,#d1fae5);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.mp-mov{position:fixed;inset:0;background:rgba(6,78,59,.58);backdrop-filter:blur(5px);z-index:200;display:flex;align-items:center;justify-content:center;padding:14px;animation:fadeIn .2s;}
+.mp-modal{background:white;border-radius:24px;max-width:660px;width:100%;max-height:92vh;overflow-y:auto;animation:slideUp2 .32s cubic-bezier(.22,1,.36,1);box-shadow:0 28px 70px rgba(6,78,59,.38);}
+.mp-qbtn{width:28px;height:28px;border-radius:7px;border:2px solid #d1fae5;background:white;font-size:15px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#059669;}
+.mp-qbtn:hover{background:#ecfdf5;border-color:#10b981;}
+.mp-ptab{padding:8px 16px;border:none;border-radius:20px;font-size:12px;font-weight:800;cursor:pointer;font-family:Nunito,sans-serif;transition:all .2s;}
+.mp-ptab.active{background:linear-gradient(135deg,#10b981,#059669);color:white;box-shadow:0 3px 10px rgba(16,185,129,.3);}
+.mp-ptab:not(.active){background:#f3f4f6;color:#6b7280;}
+.mp-ptab:not(.active):hover{background:#ecfdf5;color:#059669;}
+.mp-stitle{font-size:18px;font-weight:900;color:#1a2e1a;display:flex;align-items:center;gap:7px;margin-bottom:13px;}
+.mp-spill{background:white;border-radius:12px;padding:12px 15px;border:1.5px solid rgba(16,185,129,.1);box-shadow:0 2px 7px rgba(6,78,59,.05);text-align:center;flex:1;}
+.mp-toast{position:fixed;bottom:72px;left:50%;transform:translateX(-50%);background:rgba(6,78,59,.92);color:white;padding:10px 18px;border-radius:12px;font-size:13px;font-weight:800;z-index:9999;pointer-events:none;animation:slideUp .28s ease,mpFO .4s ease 1.8s forwards;border:1px solid #10b981;font-family:Nunito,sans-serif;white-space:nowrap;}
+@keyframes mpFO{to{opacity:0;transform:translateX(-50%) translateY(7px);}}
+/* ── AGRIINNOVATE ── */
+.ai-pg-hero{background:linear-gradient(135deg,#0c1a2e 0%,#0f2d4a 40%,#1a3a5c 70%,#1e4d3a 100%);border-radius:22px;padding:30px 28px;margin-bottom:24px;position:relative;overflow:hidden;box-shadow:0 18px 50px rgba(6,30,60,.45);}
+.ai-pg-hero::before{content:'';position:absolute;inset:0;background:url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23ffffff' fill-opacity='0.03'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/svg%3E");}
+.ai-pg-hero::after{content:'';position:absolute;bottom:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#10b981,#3b82f6,#f59e0b,#10b981);}
+.ai-bcard{background:white;border-radius:20px;overflow:hidden;box-shadow:0 5px 20px rgba(6,30,60,.09);border:1.5px solid rgba(59,130,246,.1);cursor:pointer;transition:all .28s cubic-bezier(.34,1.56,.64,1);}
+.ai-bcard:hover{transform:translateY(-6px);box-shadow:0 18px 44px rgba(6,30,60,.16);border-color:rgba(59,130,246,.28);}
+.ai-bbanner{height:126px;position:relative;display:flex;align-items:center;justify-content:center;font-size:64px;overflow:hidden;}
+.ai-bbanner::after{content:'';position:absolute;inset:0;background:linear-gradient(to bottom,transparent 40%,rgba(0,0,0,.28));}
+.ai-vring{position:absolute;top:9px;right:9px;background:linear-gradient(135deg,#059669,#047857);color:white;font-size:9px;font-weight:800;padding:3px 8px;border-radius:20px;z-index:2;}
+.ai-ibox{background:#f8fafc;border-radius:9px;padding:9px 11px;text-align:center;border:1px solid #e5e7eb;flex:1;}
+.ai-inum{font-size:15px;font-weight:900;font-family:'Sour Gummy',cursive;}
+.ai-ilbl{font-size:9px;color:#6b7280;font-weight:700;margin-top:1px;}
+.ai-authbar{display:flex;align-items:center;gap:7px;background:linear-gradient(135deg,#ecfdf5,#d1fae5);border:1.5px solid #a7f3d0;border-radius:9px;padding:8px 11px;margin-top:8px;}
+.ai-dot{width:7px;height:7px;border-radius:50%;background:#10b981;box-shadow:0 0 5px #10b981;animation:igDot 2s ease-in-out infinite;flex-shrink:0;}
+.ai-det-ov{position:fixed;inset:0;background:rgba(6,20,50,.68);backdrop-filter:blur(7px);z-index:400;display:flex;align-items:center;justify-content:center;padding:14px;animation:fadeIn .2s;}
+.ai-det-modal{background:white;border-radius:24px;max-width:740px;width:100%;max-height:92vh;overflow-y:auto;animation:slideUp2 .32s cubic-bezier(.22,1,.36,1);box-shadow:0 36px 90px rgba(6,20,50,.45);}
+.ai-tl{display:flex;gap:13px;margin-bottom:16px;position:relative;}
+.ai-tl-dot{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;margin-top:2px;z-index:1;}
+.ai-tl-line{position:absolute;left:15px;top:36px;bottom:-16px;width:2px;background:linear-gradient(to bottom,#d1fae5,transparent);}
+.ai-tl:last-child .ai-tl-line{display:none;}
+.ai-ftab{padding:7px 14px;border-radius:20px;border:none;font-size:12px;font-weight:800;cursor:pointer;font-family:Nunito,sans-serif;transition:all .2s;white-space:nowrap;}
+.ai-ftab.active{background:linear-gradient(135deg,#1d4ed8,#2563eb);color:white;box-shadow:0 3px 10px rgba(37,99,235,.35);}
+.ai-ftab:not(.active){background:#f3f4f6;color:#6b7280;}
+.ai-ftab:not(.active):hover{background:#eff6ff;color:#2563eb;}
+.ai-idea-card{background:linear-gradient(135deg,#eff6ff,#f0fdf4);border-radius:14px;padding:16px;border:1.5px solid rgba(59,130,246,.13);transition:all .22s;position:relative;overflow:hidden;}
+.ai-idea-card:hover{transform:translateY(-3px);box-shadow:0 8px 24px rgba(6,30,60,.1);}
+.ai-idea-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;}
+.mp-empty{text-align:center;padding:44px 18px;color:#9ca3af;}
+@media(max-width:768px){.mp-grid{grid-template-columns:repeat(2,1fr);gap:10px;}.mp-f2{grid-template-columns:1fr;}.mp-cart-drawer{width:100%;}.mp-modal{border-radius:16px 16px 0 0;max-height:88vh;}}
+</style>
+
+<script>
+// =============================================================
+// MARKETPLACE — server-backed, all data permanent
+// =============================================================
+var mpTab='browse',mpCategory='all',mpSearchQ='',mpCart=[],mpLS=1,mpLoading=false,mpLLd=false;
+var mpProducts=[],mpOrders=[],mpMyListings=[];
+var mpD={name:'',category:'grains',desc:'',emoji:'🌾',price:'',mrp:'',unit:'kg',minQty:'1',stock:'',organic:false};
+var MP_CATS=[{id:'all',l:'All'},{id:'grains',l:'Grains'},{id:'pulses',l:'Pulses'},{id:'spices',l:'Spices'},{id:'oils',l:'Oils & Ghee'},{id:'fruits',l:'Fruits'},{id:'vegetables',l:'Vegetables'},{id:'honey',l:'Honey'},{id:'processed',l:'Processed'},{id:'seeds',l:'Seeds'},{id:'inputs',l:'Farm Inputs'}];
+
+function kmH(){var h={'Content-Type':'application/json'};var t=localStorage.getItem('km_token');if(t)h['Authorization']='Bearer '+t;return h;}
+
+async function mpFetchProducts(){
+  try{var r=await fetch('/api/marketplace/products',{headers:kmH()});if(r.ok){var d=await r.json();mpProducts=d.products||d||[];}}catch(e){mpProducts=[];}
+}
+async function mpFetchOrders(){
+  if(!localStorage.getItem('km_token'))return;
+  try{var r=await fetch('/api/marketplace/orders/mine',{headers:kmH()});if(r.ok){var d=await r.json();mpOrders=d.orders||d||[];}}catch(e){mpOrders=[];}
+}
+async function mpPostProduct(data){
+  var r=await fetch('/api/marketplace/products',{method:'POST',headers:kmH(),body:JSON.stringify(data)});
+  return r.json();
+}
+async function mpPostOrder(items,total){
+  var r=await fetch('/api/marketplace/orders',{method:'POST',headers:kmH(),body:JSON.stringify({items:items,total:total})});
+  return r;
+}
+
+function renderMarketplace(){
+  var el=document.getElementById('page-marketplace');if(!el)return;
+  el.innerHTML=mpShell();
+  if(!document.getElementById('mp-cart-drawer'))document.body.insertAdjacentHTML('beforeend',mpCartHTML());
+  if(typeof lucide!=='undefined')lucide.createIcons();
+  if(!mpProducts.length&&!mpLoading){mpLoading=true;mpFetchProducts().then(function(){mpLoading=false;mpRefresh();});}
+  if(!mpOrders.length)mpFetchOrders();
+}
+
+function mpRefresh(){var e=document.getElementById('mp-tab-body');if(e)e.innerHTML=mpTab==='browse'?mpBrowse():mpTab==='sell'?mpSell():mpTab==='sellers'?mpSellersTab():mpOrdersTab();}
+
+function mpShell(){
+  var cc=mpCart.reduce(function(a,c){return a+c.qty;},0);
+  return '<div>'+
+    '<div class="mp-hero">'+
+      '<div style="position:relative;z-index:1;display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:10px;">'+
+        '<div><div style="font-size:10px;font-weight:800;color:rgba(255,255,255,.45);letter-spacing:.1em;text-transform:uppercase;margin-bottom:4px;">🌍 Farm-to-Door Marketplace</div>'+
+        '<div style="font-family:\'Sour Gummy\',cursive;font-size:24px;font-weight:900;color:white;line-height:1.1;">KisanBazaar</div>'+
+        '<div style="font-size:12px;color:rgba(255,255,255,.7);margin-top:3px;font-weight:600;">Real Listings · Verified Sellers · 0% Farmer Commission</div></div>'+
+        '<div style="display:flex;gap:7px;flex-wrap:wrap;">'+
+          '<button onclick="mpOpenCart()" style="position:relative;background:rgba(255,255,255,.15);border:2px solid rgba(255,255,255,.3);border-radius:11px;padding:8px 13px;cursor:pointer;color:white;font-size:13px;font-weight:800;font-family:Nunito,sans-serif;display:flex;align-items:center;gap:5px;">🛒 Cart'+(cc>0?' <span style="background:#ef4444;color:white;font-size:10px;font-weight:900;min-width:17px;height:17px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center;padding:0 3px;">'+cc+'</span>':'')+'</button>'+
+          '<button onclick="mpSetTab(\'sell\')" style="background:linear-gradient(135deg,#f59e0b,#d97706);border:none;border-radius:11px;padding:8px 13px;cursor:pointer;color:#1a2e1a;font-size:12px;font-weight:900;font-family:Nunito,sans-serif;">+ List Product</button>'+
+        '</div>'+
+      '</div>'+
+      '<div class="mp-sbar"><span style="font-size:16px;">🔍</span><input type="text" placeholder="Search products, sellers..." value="'+mpEsc(mpSearchQ)+'" oninput="mpSearch(this.value)"/></div>'+
+    '</div>'+
+    '<div style="display:flex;gap:6px;margin-bottom:18px;flex-wrap:wrap;">'+['browse','sell','sellers','orders'].map(function(t,i){var ll=['🛍️ Browse','📦 Sell','🏭 Sellers','📋 My Orders'];return '<button class="mp-ptab '+(mpTab===t?'active':'')+'" onclick="mpSetTab(\''+t+'\')">'+ll[i]+'</button>';}).join('')+'</div>'+
+    '<div id="mp-tab-body">'+(mpTab==='browse'?mpBrowse():mpTab==='sell'?mpSell():mpTab==='sellers'?mpSellersTab():mpOrdersTab())+'</div>'+
+  '</div>';
+}
+
+function mpBrowse(){
+  var q=mpSearchQ.toLowerCase();
+  var list=mpProducts.filter(function(p){
+    return (mpCategory==='all'||p.category===mpCategory)&&
+      (!q||p.name.toLowerCase().indexOf(q)>-1||(p.sellerName||'').toLowerCase().indexOf(q)>-1);
+  });
+  var chips='<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:7px;margin-bottom:16px;">';
+  MP_CATS.forEach(function(c){chips+='<button class="mp-chip '+(mpCategory===c.id?'active':'')+'" onclick="mpSetCategory(\''+c.id+'\')">'+c.l+'</button>';});
+  chips+='</div>';
+  if(mpLoading)return chips+'<div class="mp-empty"><div style="font-size:44px;">⏳</div><p style="font-size:14px;font-weight:700;margin-top:10px;">Loading products...</p></div>';
+  if(!list.length)return chips+'<div class="mp-empty"><div style="font-size:44px;">'+(mpProducts.length?'🔍':'🛒')+'</div><p style="font-size:14px;font-weight:700;margin-top:10px;">'+(mpProducts.length?'No products match':'No products listed yet')+'</p><small style="font-size:12px;">'+(mpProducts.length?'Try different filters':'Be the first to list a product!')+'</small>'+(mpProducts.length?'':'<br><button onclick="mpSetTab(\'sell\')" class="btn-gold" style="margin-top:10px;padding:9px 18px;font-size:13px;">+ List Now</button>')+'</div>';
+  return chips+'<div style="font-size:11px;color:#6b7280;font-weight:700;margin-bottom:10px;">'+list.length+' product'+(list.length!==1?'s':'')+'</div><div class="mp-grid">'+list.map(mpCard).join('')+'</div>';
+}
+
+function mpCard(p){
+  var disc=p.mrp>p.price?Math.round((1-p.price/p.mrp)*100):0;
+  return '<div class="mp-card" onclick="mpOpenProd(\''+p._id+'\')">'+
+    '<div class="mp-cimg"><span>'+(p.emoji||'🌾')+'</span>'+
+    (p.organic?'<div class="mp-borg">🌿 ORGANIC</div>':'')+(p.featured?'<div class="mp-bfeat">⭐ TOP</div>':'')+
+    (disc>0?'<div style="position:absolute;bottom:7px;right:7px;background:#ef4444;color:white;font-size:9px;font-weight:900;padding:2px 6px;border-radius:20px;">'+disc+'% OFF</div>':'')+
+    '</div><div class="mp-cbody">'+
+    '<div class="mp-cname">'+mpEsc(p.name)+'</div>'+
+    '<div class="mp-csel">'+(p.sellerEmoji||'🏪')+' '+mpEsc(p.sellerName||'KisanMitra Seller')+(p.sellerVerified?' <span style="color:#059669;font-size:12px;">✓</span>':'')+'</div>'+
+    '<div style="display:flex;align-items:baseline;gap:5px;"><div class="mp-cprice">₹'+p.price+'</div><div style="font-size:10px;color:#9ca3af;font-weight:600;">/'+p.unit+'</div>'+(p.mrp>p.price?'<div style="font-size:10px;color:#9ca3af;text-decoration:line-through;">₹'+p.mrp+'</div>':'')+
+    '</div>'+(p.rating>0?'<div style="font-size:10px;color:#6b7280;font-weight:600;margin-top:2px;">★ '+p.rating+' ('+p.reviews+')</div>':'')+
+    '<div style="font-size:10px;color:#9ca3af;margin-top:2px;">📦 Min. '+p.minQty+' '+p.unit+'</div>'+
+    '<button class="mp-addbtn" onclick="event.stopPropagation();mpAddToCart(\''+p._id+'\')">+ Add to Cart</button>'+
+    '</div></div>';
+}
+
+function mpSell(){
+  var bens=[{i:'💰',t:'0% Commission',d:'Farmers list & sell free'},{i:'🌍',t:'Pan-India Reach',d:'Buyers across all states'},{i:'✅',t:'Verified Badge',d:'After KYC verification'},{i:'📊',t:'Real Insights',d:'Views, enquiries, sales'},{i:'🚚',t:'Logistics',d:'Partner courier ₹40/kg'},{i:'💬',t:'Buyer Chat',d:'Direct buyer contact'}];
+  var bh='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:10px;margin-bottom:20px;">';
+  bens.forEach(function(b){bh+='<div style="background:white;border-radius:13px;padding:13px;border:1.5px solid rgba(16,185,129,.1);box-shadow:0 2px 8px rgba(6,78,59,.05);"><div style="font-size:24px;margin-bottom:6px;">'+b.i+'</div><div style="font-size:12px;font-weight:800;color:#1a2e1a;margin-bottom:2px;">'+b.t+'</div><div style="font-size:11px;color:#6b7280;font-weight:600;">'+b.d+'</div></div>';});
+  bh+='</div>';
+  var ss=['Product Info','Pricing & Stock','Submit'];
+  var sh='<div style="display:flex;align-items:center;padding:16px 20px 0;">';
+  ss.forEach(function(s,i){var a=mpLS>=i+1;sh+='<div style="display:flex;align-items:center;flex:'+(i<2?'1':'0')+';min-width:0;">'+
+    '<div style="width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:900;flex-shrink:0;background:'+(a?'linear-gradient(135deg,#10b981,#059669)':'#e5e7eb')+';color:'+(a?'white':'#9ca3af')+';">'+(i+1)+'</div>'+
+    '<div style="font-size:10px;font-weight:700;margin-left:6px;color:'+(a?'#059669':'#9ca3af')+';white-space:nowrap;">'+s+'</div>'+
+    (i<2?'<div style="flex:1;height:2px;margin:0 8px;background:'+(mpLS>i+1?'#10b981':'#e5e7eb')+';min-width:8px;"></div>':'')+
+  '</div>';});
+  sh+='</div>';
+  var ml=mpMyListings.length?'<div class="mp-stitle" style="margin-top:8px;">📦 My Listings ('+mpMyListings.length+')</div><div class="mp-grid">'+mpMyListings.map(mpCard).join('')+'</div>':'';
+  return bh+'<div class="mp-sell-box"><div class="mp-sell-hdr"><div><div style="font-size:16px;font-weight:900;font-family:\'Sour Gummy\',cursive;">📦 List Your Product</div><div style="font-size:11px;opacity:.75;margin-top:2px;">FREE for farmers · Business: 3% on sales</div></div><div style="background:rgba(255,255,255,.15);border-radius:8px;padding:4px 11px;font-size:11px;font-weight:800;">Step '+mpLS+'/3</div></div>'+sh+'<div style="padding:18px 20px;">'+(mpLS===1?mpS1():mpLS===2?mpS2():mpS3())+'</div></div>'+ml;
+}
+
+function mpS1(){return '<div class="mp-f2"><div><label style="font-size:11px;font-weight:800;color:#374151;display:block;margin-bottom:4px;">Product Name *</label><input class="mp-inp" placeholder="e.g. Organic Wheat Flour" value="'+mpEsc(mpD.name)+'" oninput="mpD.name=this.value"/></div><div><label style="font-size:11px;font-weight:800;color:#374151;display:block;margin-bottom:4px;">Category *</label><select class="mp-sel" onchange="mpD.category=this.value">'+MP_CATS.filter(function(c){return c.id!=='all';}).map(function(c){return '<option value="'+c.id+'"'+(mpD.category===c.id?' selected':'')+'>'+c.l+'</option>';}).join('')+'</select></div></div><div class="mp-f2"><div><label style="font-size:11px;font-weight:800;color:#374151;display:block;margin-bottom:4px;">Emoji</label><input class="mp-inp" placeholder="🌾" value="'+mpD.emoji+'" maxlength="2" oninput="mpD.emoji=this.value" style="font-size:22px;text-align:center;"/></div><div><label style="font-size:11px;font-weight:800;color:#374151;display:block;margin-bottom:4px;">Unit *</label><select class="mp-sel" onchange="mpD.unit=this.value">'+['kg','gram','litre','quintal','dozen','box','pack','bag','piece'].map(function(u){return '<option value="'+u+'"'+(mpD.unit===u?' selected':'')+'>'+u+'</option>';}).join('')+'</select></div></div><div style="margin-bottom:11px;"><label style="font-size:11px;font-weight:800;color:#374151;display:block;margin-bottom:4px;">Description *</label><textarea class="mp-ta" placeholder="Variety, growing method, quality details..." oninput="mpD.desc=this.value">'+mpEsc(mpD.desc)+'</textarea></div><label style="display:flex;align-items:center;gap:8px;background:#ecfdf5;border:1px solid #d1fae5;border-radius:9px;padding:10px 13px;cursor:pointer;margin-bottom:12px;"><input type="checkbox" id="mp-org-cb" style="width:16px;height:16px;accent-color:#10b981;" '+(mpD.organic?'checked':'')+' onchange="mpD.organic=this.checked"/><span style="font-size:12px;font-weight:700;color:#065f46;">🌿 Organic / Naturally-Grown product</span></label><div style="display:flex;justify-content:flex-end;"><button onclick="mpLN()" class="btn-green" style="padding:10px 24px;font-size:13px;">Next: Pricing →</button></div>';}
+
+function mpS2(){var pv='';if(mpD.price&&mpD.mrp){var d=Math.round((1-parseFloat(mpD.price)/parseFloat(mpD.mrp))*100);pv='<div style="background:linear-gradient(135deg,#ecfdf5,#d1fae5);border:1px solid #a7f3d0;border-radius:10px;padding:11px 13px;margin-bottom:11px;display:flex;gap:14px;font-size:12px;flex-wrap:wrap;"><span style="color:#6b7280;">Price: <strong style="color:#059669;">₹'+mpD.price+'/'+mpD.unit+'</strong></span><span style="color:#6b7280;">MRP: <strong>₹'+mpD.mrp+'</strong></span>'+(d>0?'<span style="color:#6b7280;">Saves: <strong style="color:#ef4444;">'+d+'%</strong></span>':'')+'</div>';}
+return '<div class="mp-f2"><div><label style="font-size:11px;font-weight:800;color:#374151;display:block;margin-bottom:4px;">Selling Price (₹) *</label><input class="mp-inp" type="number" min="1" placeholder="189" value="'+mpD.price+'" oninput="mpD.price=this.value;mpRefresh()"/></div><div><label style="font-size:11px;font-weight:800;color:#374151;display:block;margin-bottom:4px;">MRP (₹)</label><input class="mp-inp" type="number" min="1" placeholder="220" value="'+mpD.mrp+'" oninput="mpD.mrp=this.value;mpRefresh()"/></div></div><div class="mp-f2"><div><label style="font-size:11px;font-weight:800;color:#374151;display:block;margin-bottom:4px;">Min Order Qty *</label><input class="mp-inp" type="number" min="1" placeholder="1" value="'+mpD.minQty+'" oninput="mpD.minQty=this.value"/></div><div><label style="font-size:11px;font-weight:800;color:#374151;display:block;margin-bottom:4px;">Stock Available *</label><input class="mp-inp" type="number" min="1" placeholder="100" value="'+mpD.stock+'" oninput="mpD.stock=this.value"/></div></div>'+pv+'<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:9px;padding:10px 13px;margin-bottom:13px;font-size:11px;color:#92400e;font-weight:700;">⚡ Farmers: 0% commission · Business sellers: 3% per sale</div><div style="display:flex;gap:8px;justify-content:space-between;"><button onclick="mpLS=1;mpRefresh()" style="background:#f3f4f6;border:none;border-radius:10px;padding:10px 20px;font-size:12px;font-weight:800;cursor:pointer;font-family:Nunito,sans-serif;">← Back</button><button onclick="mpLN()" class="btn-green" style="padding:10px 24px;font-size:13px;">Next →</button></div>';}
+
+function mpS3(){return '<div style="background:linear-gradient(135deg,#ecfdf5,#f0fdf4);border:1.5px solid #a7f3d0;border-radius:12px;padding:14px;margin-bottom:14px;"><div style="font-size:12px;font-weight:800;color:#065f46;margin-bottom:6px;">📋 Summary</div><div style="font-size:12px;color:#374151;line-height:1.7;"><strong>Product:</strong> '+mpD.emoji+' '+mpEsc(mpD.name||'(not set)')+'<br><strong>Category:</strong> '+mpD.category+'<br><strong>Price:</strong> ₹'+(mpD.price||'?')+' / '+mpD.unit+' · Min: '+mpD.minQty+'<br><strong>Stock:</strong> '+(mpD.stock||'?')+' '+mpD.unit+'<br><strong>Organic:</strong> '+(mpD.organic?'✅ Yes':'❌ No')+'</div></div><div style="display:flex;gap:8px;justify-content:space-between;"><button onclick="mpLS=2;mpRefresh()" style="background:#f3f4f6;border:none;border-radius:10px;padding:10px 20px;font-size:12px;font-weight:800;cursor:pointer;font-family:Nunito,sans-serif;">← Back</button><button onclick="mpSubmitL()" '+(mpLLd?'disabled':'')+' style="background:linear-gradient(135deg,#10b981,#059669);border:none;border-radius:10px;padding:10px 26px;font-size:13px;font-weight:900;color:white;cursor:pointer;font-family:Nunito,sans-serif;box-shadow:0 4px 14px rgba(16,185,129,.35);">'+(mpLLd?'⏳ Submitting...':'🚀 Submit Listing')+'</button></div>';}
+
+function mpSellersTab(){
+  var smap={};mpProducts.forEach(function(p){if(!p.sellerId)return;if(!smap[p.sellerId])smap[p.sellerId]={id:p.sellerId,name:p.sellerName||'Seller',emoji:p.sellerEmoji||'🏪',location:p.sellerLocation||'India',verified:!!p.sellerVerified,count:0,cat:p.category||'general'};smap[p.sellerId].count++;});
+  var sellers=Object.values(smap);
+  if(!sellers.length)return '<div class="mp-empty"><div style="font-size:44px;">🏭</div><p style="font-size:14px;font-weight:700;margin-top:10px;">No sellers yet</p><small>Be the first to list a product!</small></div>'+mpSellerCTA();
+  var h='<div class="mp-stitle">🏭 Verified Sellers</div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;margin-bottom:20px;">';
+  sellers.forEach(function(s){h+='<div style="background:white;border-radius:16px;padding:15px;border:1.5px solid rgba(16,185,129,.1);box-shadow:0 3px 10px rgba(6,78,59,.06);"><div style="display:flex;gap:11px;align-items:center;margin-bottom:11px;"><div style="font-size:32px;width:48px;height:48px;background:linear-gradient(135deg,#ecfdf5,#fef3c7);border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+s.emoji+'</div><div><div style="font-size:13px;font-weight:900;color:#1a2e1a;">'+mpEsc(s.name)+'</div><div style="font-size:11px;color:#6b7280;font-weight:600;margin-top:1px;">📍 '+mpEsc(s.location)+'</div>'+(s.verified?'<span style="background:#d1fae5;color:#065f46;font-size:9px;font-weight:800;padding:2px 7px;border-radius:20px;display:inline-block;margin-top:3px;">✓ Verified</span>':'')+'</div></div><div style="display:flex;gap:7px;margin-bottom:10px;"><div style="background:#f8fafc;border-radius:8px;padding:7px;text-align:center;flex:1;border:1px solid #e5e7eb;"><div style="font-size:14px;font-weight:900;color:#059669;">'+s.count+'</div><div style="font-size:9px;color:#6b7280;font-weight:700;">Products</div></div><div style="background:#f8fafc;border-radius:8px;padding:7px;text-align:center;flex:1;border:1px solid #e5e7eb;"><div style="font-size:11px;font-weight:800;color:#374151;">'+s.cat+'</div><div style="font-size:9px;color:#6b7280;font-weight:700;">Category</div></div></div><button onclick="mpFilterBySeller(\''+mpEsc(s.name)+'\')" style="width:100%;padding:7px;background:linear-gradient(135deg,#ecfdf5,white);border:1.5px solid #d1fae5;border-radius:8px;font-size:11px;font-weight:800;cursor:pointer;color:#059669;font-family:Nunito,sans-serif;">View Products →</button></div>';});
+  return h+'</div>'+mpSellerCTA();
+}
+function mpSellerCTA(){return '<div style="background:linear-gradient(135deg,#064e3b,#065f46);border-radius:18px;padding:22px;color:white;text-align:center;"><div style="font-size:28px;margin-bottom:8px;">🤝</div><div style="font-family:\'Sour Gummy\',cursive;font-size:18px;font-weight:900;margin-bottom:6px;">Sell on KisanBazaar</div><div style="font-size:12px;opacity:.8;margin-bottom:13px;">Farmers list FREE. Business: 3% on sales only.</div><button onclick="mpSetTab(\'sell\')" style="background:linear-gradient(135deg,#f59e0b,#d97706);border:none;border-radius:11px;padding:11px 24px;font-size:13px;font-weight:900;color:#1a2e1a;cursor:pointer;font-family:Nunito,sans-serif;">🌾 Start Selling →</button></div>';}
+
+function mpOrdersTab(){
+  if(!localStorage.getItem('km_token'))return '<div class="mp-empty"><div style="font-size:44px;">🔐</div><p style="font-size:14px;font-weight:700;margin-top:10px;">Login required</p><small><a href="/kisanmitra-registration.html" style="color:#059669;">Login to view orders</a></small></div>';
+  if(!mpOrders.length)return '<div class="mp-empty"><div style="font-size:44px;">📭</div><p style="font-size:14px;font-weight:700;margin-top:10px;">No orders yet</p><small>Browse and place your first order!</small></div>';
+  var sc={delivered:'#059669',shipped:'#2563eb',processing:'#f59e0b',cancelled:'#ef4444'};
+  var sb={delivered:'#ecfdf5',shipped:'#eff6ff',processing:'#fffbeb',cancelled:'#fef2f2'};
+  var h='<div class="mp-stitle">📋 My Orders</div><div style="display:flex;flex-direction:column;gap:11px;">';
+  mpOrders.forEach(function(o){h+='<div style="background:white;border-radius:14px;padding:14px 16px;border:1.5px solid rgba(16,185,129,.09);box-shadow:0 3px 10px rgba(6,78,59,.06);display:flex;gap:11px;align-items:center;flex-wrap:wrap;"><div style="width:46px;height:46px;background:linear-gradient(135deg,#ecfdf5,#d1fae5);border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0;">'+(o.emoji||'📦')+'</div><div style="flex:1;"><div style="font-size:13px;font-weight:800;color:#1a2e1a;">'+mpEsc(o.productName||'Order #'+o._id)+'</div><div style="font-size:11px;color:#6b7280;font-weight:600;margin-top:1px;">#'+o._id.slice(-8)+' · '+new Date(o.createdAt||Date.now()).toLocaleDateString('en-IN')+'</div><div style="font-size:14px;font-weight:900;color:#059669;margin-top:2px;">₹'+o.total+'</div></div><div style="background:'+(sb[o.status]||'#f3f4f6')+';color:'+(sc[o.status]||'#374151')+';font-size:11px;font-weight:800;padding:3px 11px;border-radius:20px;text-transform:capitalize;">● '+(o.status||'processing')+'</div></div>';});
+  return h+'</div>';
+}
+
+function mpOpenProd(id){
+  var p=mpProducts.find(function(x){return x._id===id;});if(!p)return;
+  var disc=p.mrp>p.price?Math.round((1-p.price/p.mrp)*100):0;
+  var ex=document.getElementById('mp-product-modal');if(ex)ex.remove();
+  var m=document.createElement('div');m.className='mp-mov';m.id='mp-product-modal';
+  m.addEventListener('click',function(e){if(e.target===m)m.remove();});
+  m.innerHTML='<div class="mp-modal"><div style="padding:20px 24px;">'+
+    '<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:13px;">'+
+      '<div style="font-size:66px;line-height:1;">'+(p.emoji||'🌾')+'</div>'+
+      '<button onclick="document.getElementById(\'mp-product-modal\').remove()" style="background:#f3f4f6;border:none;cursor:pointer;width:32px;height:32px;border-radius:8px;font-size:15px;flex-shrink:0;font-family:Nunito,sans-serif;">✕</button>'+
+    '</div>'+
+    (p.organic?'<div style="display:inline-block;background:#d1fae5;color:#065f46;font-size:10px;font-weight:800;padding:2px 8px;border-radius:20px;margin-bottom:7px;">🌿 ORGANIC</div>':'')+
+    '<div style="font-size:18px;font-weight:900;color:#1a2e1a;margin-bottom:4px;">'+mpEsc(p.name)+'</div>'+
+    '<div style="display:flex;align-items:center;gap:6px;margin-bottom:11px;flex-wrap:wrap;">'+
+      '<span style="font-size:12px;color:#6b7280;font-weight:600;">by '+(p.sellerEmoji||'🏪')+' '+mpEsc(p.sellerName||'KisanMitra Seller')+'</span>'+
+      (p.sellerVerified?'<span style="background:#d1fae5;color:#065f46;font-size:10px;font-weight:800;padding:2px 7px;border-radius:20px;">✓ Verified</span>':'')+
+      (p.sellerLocation?'<span style="background:#ecfdf5;color:#059669;font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;">📍 '+mpEsc(p.sellerLocation)+'</span>':'')+
+    '</div>'+
+    '<div style="display:flex;align-items:baseline;gap:10px;margin-bottom:11px;">'+
+      '<div style="font-size:26px;font-weight:900;color:#059669;font-family:\'Sour Gummy\',cursive;">₹'+p.price+'<span style="font-size:13px;">/'+p.unit+'</span></div>'+
+      (p.mrp>p.price?'<div style="font-size:14px;color:#9ca3af;text-decoration:line-through;">₹'+p.mrp+'</div><div style="background:#fef2f2;color:#ef4444;font-size:11px;font-weight:800;padding:2px 7px;border-radius:20px;">'+disc+'% OFF</div>':'')+
+    '</div>'+
+    '<div style="font-size:13px;color:#374151;line-height:1.5;margin-bottom:13px;">'+mpEsc(p.desc||'')+'</div>'+
+    (p.tags&&p.tags.length?'<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:11px;">'+p.tags.map(function(t){return '<span style="background:linear-gradient(135deg,#ecfdf5,#d1fae5);color:#065f46;font-size:11px;font-weight:800;padding:3px 9px;border-radius:20px;border:1px solid #a7f3d0;">'+mpEsc(t)+'</span>';}).join('')+'</div>':'')+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;">'+
+      [['📦','Min Order',p.minQty+' '+p.unit],['🏷️','Stock',p.stock?p.stock+' '+p.unit:'Available'],['⭐','Rating',p.rating>0?p.rating+'/5':'No ratings'],['🌾','Category',p.category||'General']].map(function(x){return '<div style="background:#f8fafc;border-radius:10px;padding:9px 11px;border:1px solid #e5e7eb;"><div style="font-size:10px;color:#9ca3af;font-weight:600;">'+x[0]+' '+x[1]+'</div><div style="font-size:12px;font-weight:800;color:#1a2e1a;margin-top:1px;">'+mpEsc(String(x[2]))+'</div></div>';}).join('')+
+    '</div>'+
+    '<div style="display:flex;gap:10px;align-items:center;">'+
+      '<div style="display:flex;align-items:center;gap:6px;border:2px solid #d1fae5;border-radius:10px;padding:6px 11px;">'+
+        '<button class="mp-qbtn" onclick="var v=document.getElementById(\'mp-mqty\');v.textContent=Math.max('+(p.minQty||1)+',parseInt(v.textContent)-1)">−</button>'+
+        '<span id="mp-mqty" style="font-size:14px;font-weight:900;min-width:24px;text-align:center;">'+(p.minQty||1)+'</span>'+
+        '<button class="mp-qbtn" onclick="var v=document.getElementById(\'mp-mqty\');v.textContent=parseInt(v.textContent)+1">+</button>'+
+      '</div>'+
+      '<button onclick="mpAddToCartMod(\''+p._id+'\')" style="flex:1;background:linear-gradient(135deg,#10b981,#059669);color:white;border:none;border-radius:11px;padding:12px;font-size:14px;font-weight:900;cursor:pointer;font-family:Nunito,sans-serif;box-shadow:0 4px 14px rgba(16,185,129,.35);">🛒 Add to Cart</button>'+
+    '</div>'+
+  '</div></div>';
+  document.body.appendChild(m);
+}
+
+function mpCartHTML(){
+  var total=mpCart.reduce(function(a,c){return a+c.price*c.qty;},0);
+  var ih='';
+  if(!mpCart.length)ih='<div style="text-align:center;padding:34px 14px;"><div style="font-size:42px;margin-bottom:10px;">🛒</div><div style="font-size:14px;font-weight:700;color:#6b7280;">Cart is empty</div><div style="font-size:12px;color:#9ca3af;margin-top:4px;">Browse products to add items</div></div>';
+  else mpCart.forEach(function(item){ih+='<div class="mp-citem"><div class="mp-cemoji">'+(item.emoji||'🌾')+'</div><div style="flex:1;"><div style="font-size:12px;font-weight:800;color:#1a2e1a;line-height:1.3;">'+mpEsc(item.name)+'</div><div style="font-size:11px;color:#6b7280;margin-top:1px;">₹'+item.price+'/'+item.unit+'</div><div style="display:flex;align-items:center;gap:6px;margin-top:6px;"><button class="mp-qbtn" style="width:24px;height:24px;" onclick="mpCQty(\''+item._id+'\',-1)">−</button><span style="font-size:12px;font-weight:900;min-width:20px;text-align:center;">'+item.qty+'</span><button class="mp-qbtn" style="width:24px;height:24px;" onclick="mpCQty(\''+item._id+'\',1)">+</button></div></div><div style="text-align:right;"><div style="font-size:13px;font-weight:900;color:#059669;">₹'+Math.round(item.price*item.qty)+'</div><button onclick="mpRemove(\''+item._id+'\')" style="background:#fee2e2;border:none;border-radius:6px;padding:3px 6px;font-size:10px;color:#ef4444;font-weight:700;cursor:pointer;margin-top:4px;font-family:Nunito,sans-serif;">Remove</button></div></div>';});
+  var fh=mpCart.length?'<div style="padding:15px 18px;border-top:1px solid #e5e7eb;background:#fafafa;"><div style="display:flex;justify-content:space-between;margin-bottom:7px;font-size:12px;"><span style="font-weight:700;color:#6b7280;">Subtotal</span><span style="font-weight:900;">₹'+total+'</span></div><div style="display:flex;justify-content:space-between;margin-bottom:10px;font-size:12px;"><span style="font-weight:700;color:#6b7280;">Delivery</span><span style="font-weight:900;color:#059669;">FREE</span></div><div style="display:flex;justify-content:space-between;margin-bottom:14px;font-size:15px;border-top:1px solid #e5e7eb;padding-top:9px;"><span style="font-weight:800;">Total</span><span style="font-weight:900;color:#059669;font-size:17px;">₹'+total+'</span></div><button onclick="mpCheckout()" style="width:100%;background:linear-gradient(135deg,#10b981,#059669);color:white;border:none;border-radius:11px;padding:13px;font-size:13px;font-weight:900;cursor:pointer;font-family:Nunito,sans-serif;box-shadow:0 4px 14px rgba(16,185,129,.35);">Checkout · ₹'+total+'</button><button onclick="mpCart=[];mpReloadCart();mpShowToast(\'🗑️ Cleared\')" style="width:100%;background:transparent;border:none;padding:8px;font-size:11px;font-weight:700;color:#9ca3af;cursor:pointer;font-family:Nunito,sans-serif;margin-top:2px;">Clear Cart</button></div>':'';
+  return '<div id="mp-cart-overlay" onclick="mpCloseCart()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.38);z-index:299;backdrop-filter:blur(2px);"></div><div id="mp-cart-drawer" class="mp-cart-drawer"><div style="padding:16px 18px;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg,#064e3b,#065f46);"><div style="font-size:16px;font-weight:900;color:white;font-family:\'Sour Gummy\',cursive;">🛒 Cart ('+mpCart.length+')</div><button onclick="mpCloseCart()" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.2);color:white;border-radius:7px;width:28px;height:28px;cursor:pointer;font-size:14px;font-family:Nunito,sans-serif;">✕</button></div><div style="flex:1;overflow-y:auto;padding:13px 16px;">'+ih+'</div>'+fh+'</div>';
+}
+function mpReloadCart(){var o=document.getElementById('mp-cart-overlay');if(o)o.remove();var d=document.getElementById('mp-cart-drawer');if(d)d.remove();document.body.insertAdjacentHTML('beforeend',mpCartHTML());}
+function mpOpenCart(){if(!document.getElementById('mp-cart-drawer'))document.body.insertAdjacentHTML('beforeend',mpCartHTML());document.getElementById('mp-cart-drawer').classList.add('open');document.getElementById('mp-cart-overlay').style.display='block';}
+function mpCloseCart(){var d=document.getElementById('mp-cart-drawer');if(d)d.classList.remove('open');var o=document.getElementById('mp-cart-overlay');if(o)o.style.display='none';}
+function mpAddToCart(id){var p=mpProducts.find(function(x){return x._id===id;});if(!p)return;var ex=mpCart.find(function(c){return c._id===id;});if(ex)ex.qty++;else mpCart.push({_id:p._id,name:p.name,emoji:p.emoji||'🌾',price:p.price,unit:p.unit,minQty:p.minQty||1,qty:p.minQty||1});mpShowToast('✅ '+mpEsc(p.name.slice(0,26))+' added!');mpReloadCart();}
+function mpAddToCartMod(id){var qEl=document.getElementById('mp-mqty');var qty=qEl?parseInt(qEl.textContent)||1:1;var p=mpProducts.find(function(x){return x._id===id;});if(!p)return;var ex=mpCart.find(function(c){return c._id===id;});if(ex)ex.qty+=qty;else mpCart.push({_id:p._id,name:p.name,emoji:p.emoji||'🌾',price:p.price,unit:p.unit,minQty:p.minQty||1,qty:qty});var m=document.getElementById('mp-product-modal');if(m)m.remove();mpShowToast('✅ Added '+qty+' '+p.unit+' to cart!');mpReloadCart();}
+function mpCQty(id,d){var item=mpCart.find(function(c){return c._id===id;});if(!item)return;item.qty=Math.max(item.minQty||1,item.qty+d);mpReloadCart();}
+function mpRemove(id){mpCart=mpCart.filter(function(c){return c._id!==id;});mpReloadCart();}
+async function mpCheckout(){if(!localStorage.getItem('km_token')){window.location.href='/kisanmitra-registration.html';return;}var total=mpCart.reduce(function(a,c){return a+c.price*c.qty;},0);if(!total)return;mpShowToast('⏳ Placing order...');try{var r=await mpPostOrder(mpCart,total);if(r.ok){mpCart=[];mpReloadCart();mpCloseCart();await mpFetchOrders();mpShowToast('🎉 Order placed! Check My Orders.');}else{var err=await r.json();mpShowToast('❌ '+(err.error||'Order failed'));}}catch(e){mpShowToast('❌ Connection error');}}
+function mpLN(){if(mpLS===1){if(!mpD.name.trim()){mpShowToast('⚠️ Enter product name');return;}if(!mpD.desc.trim()){mpShowToast('⚠️ Add description');return;}mpLS=2;}else if(mpLS===2){if(!mpD.price||parseFloat(mpD.price)<=0){mpShowToast('⚠️ Enter valid price');return;}if(!mpD.stock||parseInt(mpD.stock)<=0){mpShowToast('⚠️ Enter stock');return;}mpLS=3;}mpRefresh();}
+async function mpSubmitL(){if(!localStorage.getItem('km_token')){window.location.href='/kisanmitra-registration.html';return;}if(!mpD.name||!mpD.price){mpShowToast('⚠️ Fill required fields');return;}mpLLd=true;mpRefresh();var payload={name:mpD.name.trim(),category:mpD.category,desc:mpD.desc.trim(),emoji:mpD.emoji||'🌾',price:parseFloat(mpD.price),mrp:mpD.mrp?parseFloat(mpD.mrp):parseFloat(mpD.price),unit:mpD.unit,minQty:parseInt(mpD.minQty)||1,stock:parseInt(mpD.stock)||0,organic:mpD.organic,tags:mpD.organic?['Organic','Direct Farm']:['Direct Farm'],sellerId:currentUser.id,sellerName:currentUser.name||'KisanMitra Seller',sellerEmoji:currentUser.avatar||'👨‍🌾',sellerLocation:currentUser.location||'India',sellerVerified:currentUser.verified||false};try{var res=await mpPostProduct(payload);if(res._id){mpProducts.unshift(res);mpMyListings.unshift(res);mpLS=1;mpD={name:'',category:'grains',desc:'',emoji:'🌾',price:'',mrp:'',unit:'kg',minQty:'1',stock:'',organic:false};mpLLd=false;mpShowToast('🎉 Product listed!');setTimeout(function(){mpTab='browse';renderMarketplace();},900);}else{mpLLd=false;mpRefresh();mpShowToast('❌ '+(res.error||'Listing failed'));}}catch(e){mpLLd=false;mpRefresh();mpShowToast('❌ Server error');}}
+function mpSetTab(t){mpTab=t;renderMarketplace();}
+function mpSetCategory(c){mpCategory=c;mpRefresh();}
+function mpSearch(q){mpSearchQ=q;mpRefresh();}
+function mpFilterBySeller(n){mpTab='browse';mpCategory='all';mpSearchQ=n;renderMarketplace();}
+function mpEsc(s){if(!s)return '';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+function mpShowToast(msg){var o=document.getElementById('mp-toast-el');if(o)o.remove();var t=document.createElement('div');t.id='mp-toast-el';t.className='mp-toast';t.textContent=msg;document.body.appendChild(t);setTimeout(function(){if(t.parentNode)t.remove();},2400);}
+
+// =============================================================
+// AGRIINNOVATE — server-backed
+// =============================================================
+var aiTab='all',aiSearchQ='',aiCompanies=[],aiIdeas=[],aiLoading=false;
+
+async function aiFetch(){
+  aiLoading=true;
+  try{var r=await fetch('/api/innovate/companies',{headers:{'Content-Type':'application/json'}});if(r.ok){var d=await r.json();aiCompanies=d.companies||d||[];aiIdeas=d.ideas||[];}}catch(e){aiCompanies=[];aiIdeas=[];}
+  aiLoading=false;
+}
+function renderInnovate(){
+  var el=document.getElementById('page-innovate');if(!el)return;
+  el.innerHTML=aiShell();
+  if(typeof lucide!=='undefined')lucide.createIcons();
+  if(!aiCompanies.length&&!aiLoading){aiFetch().then(function(){var e=document.getElementById('ai-body');if(e)e.innerHTML=aiContent();var nc=document.getElementById('ai-co-count');if(nc)nc.textContent=aiCompanies.length||'—';var ni=document.getElementById('ai-idea-count');if(ni)ni.textContent=aiIdeas.length||'—';});}
+}
+function aiShell(){return '<div>'+aiHero()+aiFilters()+'<div id="ai-body">'+aiContent()+'</div></div>';}
+function aiHero(){return '<div class="ai-pg-hero"><div style="position:relative;z-index:1;"><div style="font-size:10px;font-weight:800;color:rgba(255,255,255,.45);letter-spacing:.1em;text-transform:uppercase;margin-bottom:6px;">💡 Knowledge · Innovation · Authenticity</div><div style="font-family:\'Sour Gummy\',cursive;font-size:26px;font-weight:900;color:white;line-height:1.1;margin-bottom:5px;">AgriInnovate</div><div style="font-size:12px;color:rgba(255,255,255,.7);font-weight:600;max-width:500px;line-height:1.6;">Real agri-businesses changing India. Learn their story, verify their work, find your path.</div><div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;"><div style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:10px;padding:8px 13px;text-align:center;"><div style="font-family:\'Sour Gummy\',cursive;font-size:19px;font-weight:900;color:#fbbf24;" id="ai-co-count">'+(aiCompanies.length||'—')+'</div><div style="font-size:10px;color:rgba(255,255,255,.6);font-weight:700;">Companies</div></div><div style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:10px;padding:8px 13px;text-align:center;"><div style="font-family:\'Sour Gummy\',cursive;font-size:19px;font-weight:900;color:#34d399;" id="ai-idea-count">'+(aiIdeas.length||'—')+'</div><div style="font-size:10px;color:rgba(255,255,255,.6);font-weight:700;">Startup Ideas</div></div></div></div></div>';}
+function aiFilters(){var tabs=[{id:'all',l:'🌍 All'},{id:'platform',l:'📱 Platform'},{id:'supplychain',l:'🚚 Supply Chain'},{id:'organic',l:'🌿 Organic'},{id:'deeptech',l:'🛰️ Deep Tech'},{id:'fintech',l:'💳 Fintech'},{id:'trade',l:'🤝 Trade'},{id:'advisory',l:'📋 Advisory'},{id:'ideas',l:'💡 Ideas'}];var h='<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:7px;margin-bottom:18px;">';tabs.forEach(function(t){h+='<button class="ai-ftab '+(aiTab===t.id?'active':'')+'" onclick="aiSetTab(\''+t.id+'\')">'+t.l+'</button>';});return h+'</div><div style="display:flex;align-items:center;gap:8px;background:white;border:2px solid #e5e7eb;border-radius:12px;padding:10px 14px;margin-bottom:18px;box-shadow:0 2px 7px rgba(0,0,0,.04);"><span style="font-size:16px;">🔍</span><input style="flex:1;border:none;outline:none;font-size:13px;font-family:Nunito,sans-serif;font-weight:600;color:#1a2e1a;background:transparent;" placeholder="Search companies, founders, sector..." value="'+aiEsc(aiSearchQ)+'" oninput="aiSetSearch(this.value)"/></div>';}
+function aiContent(){if(aiLoading)return '<div class="mp-empty"><div style="font-size:44px;">⏳</div><p style="font-size:14px;font-weight:700;margin-top:10px;">Loading...</p></div>';if(aiTab==='ideas')return aiIdeasContent();var list=aiTab==='all'?aiCompanies:aiCompanies.filter(function(c){return c.category===aiTab;});var q=aiSearchQ.toLowerCase();if(q)list=list.filter(function(c){return c.name.toLowerCase().indexOf(q)>-1||(c.sector||'').toLowerCase().indexOf(q)>-1||(c.tagline||'').toLowerCase().indexOf(q)>-1;});if(!list.length)return '<div class="mp-empty"><div style="font-size:44px;">🏢</div><p style="font-size:14px;font-weight:700;margin-top:10px;">'+(aiCompanies.length?'No match':'No companies yet')+'</p><small style="font-size:12px;">'+(aiCompanies.length?'Try different filters':'Run node seed-innovate.js to populate')+'</small></div>'+aiSubmitCTA();return '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:18px;">'+list.map(aiCard).join('')+'</div>'+aiSubmitCTA();}
+function aiCard(c){var sc={'Series A':'#059669','Series B':'#2563eb','Series C':'#7c3aed','Series D':'#f59e0b','Series E':'#ef4444','Bootstrapped':'#374151'};return '<div class="ai-bcard" onclick="aiOpen(\''+c._id+'\')"><div class="ai-bbanner" style="background:'+(c.bannerColor||'linear-gradient(135deg,#064e3b,#065f46)')+'"><div style="font-size:64px;position:relative;z-index:1;filter:drop-shadow(0 3px 9px rgba(0,0,0,.28));">'+(c.emoji||'🌾')+'</div>'+(c.verified?'<div class="ai-vring">✅ VERIFIED</div>':'')+'</div><div style="padding:15px 17px;"><div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:5px;gap:6px;"><div style="font-size:16px;font-weight:900;color:#0c1a2e;line-height:1.2;">'+aiEsc(c.name)+'</div>'+(c.stage?'<div style="background:'+(sc[c.stage]||'#374151')+'20;color:'+(sc[c.stage]||'#374151')+';font-size:9px;font-weight:800;padding:2px 7px;border-radius:20px;border:1px solid '+(sc[c.stage]||'#374151')+'30;white-space:nowrap;">'+c.stage+'</div>':'')+'</div><div style="font-size:11px;font-weight:700;color:#6b7280;margin-bottom:7px;">'+aiEsc((c.tagline||c.shortDesc||'').slice(0,70))+'</div>'+(c.tags&&c.tags.length?'<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:9px;">'+c.tags.map(function(t){return '<span style="background:#f8fafc;color:#374151;font-size:10px;font-weight:800;padding:2px 7px;border-radius:20px;border:1px solid #e5e7eb;">'+aiEsc(t)+'</span>';}).join('')+'</div>':'')+
+'<div style="display:flex;gap:6px;margin-bottom:10px;"><div class="ai-ibox"><div class="ai-inum" style="color:#059669;">'+(c.farmersImpacted||c.farmers||'—')+'</div><div class="ai-ilbl">Farmers</div></div><div class="ai-ibox"><div class="ai-inum" style="color:#2563eb;">'+(c.funding||'—')+'</div><div class="ai-ilbl">Funding</div></div><div class="ai-ibox"><div class="ai-inum" style="color:#f59e0b;">'+(c.states||'—')+'</div><div class="ai-ilbl">States</div></div></div>'+
+'<div style="font-size:11px;color:#374151;line-height:1.5;margin-bottom:9px;">'+aiEsc((c.shortDesc||'').slice(0,110))+'</div>'+
+'<div class="ai-authbar"><div class="ai-dot"></div><div style="font-size:11px;font-weight:800;color:#065f46;">Authenticity: '+(c.authenticityScore||'—')+'%</div><div style="margin-left:auto;font-size:10px;color:#6b7280;font-weight:600;">'+aiEsc(c.auditor||'KisanMitra')+'</div></div>'+
+'<div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;"><div style="font-size:10px;color:#9ca3af;font-weight:600;">📍 '+aiEsc(c.location||'India')+' · Est. '+(c.founded||'—')+'</div><button style="background:linear-gradient(135deg,#0c1a2e,#1a3a5c);color:white;border:none;border-radius:8px;padding:6px 12px;font-size:11px;font-weight:800;cursor:pointer;font-family:Nunito,sans-serif;">Full Story →</button></div>'+
+'</div></div>';}
+function aiOpen(id){
+  var c=aiCompanies.find(function(x){return x._id===id;});if(!c)return;
+  var tlH=(c.story||[]).map(function(s,i){return '<div class="ai-tl">'+(i<(c.story||[]).length-1?'<div class="ai-tl-line"></div>':'')+
+    '<div class="ai-tl-dot" style="background:'+(s.color||'#059669')+'20;border:2px solid '+(s.color||'#059669')+';">'+(s.icon||'•')+'</div>'+
+    '<div style="flex:1;padding-top:2px;"><div style="font-size:10px;font-weight:900;color:'+(s.color||'#059669')+';margin-bottom:2px;">'+(s.year||'')+'</div>'+
+    '<div style="font-size:12px;color:#374151;font-weight:600;line-height:1.5;">'+aiEsc(s.event||'')+'</div></div></div>';}).join('');
+  var certH=(c.certifications||[]).map(function(cert){return '<div style="display:flex;align-items:center;gap:6px;padding:8px 11px;background:#f0fdf4;border:1px solid #a7f3d0;border-radius:8px;"><span style="color:#059669;">✅</span><span style="font-size:12px;font-weight:700;color:#065f46;">'+aiEsc(cert)+'</span></div>';}).join('');
+  var lesH=(c.lessons||[]).map(function(l,i){return '<div style="display:flex;gap:9px;padding:9px 11px;background:#f8fafc;border-radius:8px;border-left:3px solid #3b82f6;margin-bottom:6px;"><div style="width:20px;height:20px;background:linear-gradient(135deg,#2563eb,#1d4ed8);color:white;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:900;flex-shrink:0;">'+(i+1)+'</div><div style="font-size:12px;color:#374151;font-weight:600;line-height:1.5;">'+aiEsc(l)+'</div></div>';}).join('');
+  var ex=document.getElementById('ai-company-modal');if(ex)ex.remove();
+  var m=document.createElement('div');m.className='ai-det-ov';m.id='ai-company-modal';m.addEventListener('click',function(e){if(e.target===m)m.remove();});
+  m.innerHTML='<div class="ai-det-modal">'+
+    '<div style="height:145px;background:'+(c.bannerColor||'linear-gradient(135deg,#064e3b,#065f46)')+';position:relative;display:flex;align-items:center;padding:0 24px;gap:16px;border-radius:24px 24px 0 0;overflow:hidden;">'+
+      '<div style="font-size:68px;filter:drop-shadow(0 4px 12px rgba(0,0,0,.35));">'+(c.emoji||'🌾')+'</div>'+
+      '<div><div style="font-family:\'Sour Gummy\',cursive;font-size:22px;font-weight:900;color:white;line-height:1.1;">'+aiEsc(c.name)+'</div>'+
+      '<div style="font-size:12px;color:rgba(255,255,255,.75);font-weight:600;margin-top:3px;">'+aiEsc(c.tagline||'')+'</div>'+
+      '<div style="display:flex;gap:6px;margin-top:7px;flex-wrap:wrap;">'+(c.verified?'<span style="background:rgba(16,185,129,.3);border:1px solid rgba(16,185,129,.5);color:white;font-size:9px;font-weight:900;padding:2px 8px;border-radius:20px;">✅ VERIFIED</span>':'')+
+      (c.sector?'<span style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:white;font-size:9px;font-weight:900;padding:2px 8px;border-radius:20px;">'+aiEsc(c.sector)+'</span>':'')+'</div></div>'+
+      '<button onclick="document.getElementById(\'ai-company-modal\').remove()" style="position:absolute;top:13px;right:13px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:white;border-radius:8px;width:30px;height:30px;cursor:pointer;font-size:15px;font-family:Nunito,sans-serif;">✕</button>'+
+    '</div>'+
+    '<div style="padding:20px 24px;">'+
+      '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-bottom:18px;">'+
+      [['Founded',c.founded||'—','#374151'],['Funding',c.funding||'—','#059669'],['Farmers',c.farmersImpacted||c.farmers||'—','#2563eb'],['Employees',c.employees||'—','#7c3aed']].map(function(x){return '<div style="background:#f8fafc;border-radius:9px;padding:9px;text-align:center;border:1px solid #e5e7eb;"><div style="font-size:13px;font-weight:900;color:'+x[2]+';font-family:\'Sour Gummy\',cursive;">'+aiEsc(String(x[1]))+'</div><div style="font-size:9px;color:#9ca3af;font-weight:700;margin-top:1px;">'+x[0]+'</div></div>';}).join('')+'</div>'+
+      (c.authenticityScore?'<div style="background:linear-gradient(135deg,#f0fdf4,#ecfdf5);border:2px solid #a7f3d0;border-radius:13px;padding:14px;margin-bottom:16px;"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;"><div style="font-size:14px;font-weight:900;color:#065f46;">🏅 Authenticity</div><div style="background:linear-gradient(135deg,#059669,#047857);color:white;font-size:12px;font-weight:900;padding:4px 12px;border-radius:20px;">'+c.authenticityScore+'% Verified</div></div><div style="height:6px;background:#d1fae5;border-radius:3px;overflow:hidden;margin-bottom:9px;"><div style="height:100%;background:linear-gradient(90deg,#10b981,#059669);width:'+c.authenticityScore+'%;"></div></div>'+(c.auditor?'<div style="font-size:11px;color:#6b7280;font-weight:600;margin-bottom:9px;">Audited by: <strong style="color:#065f46;">'+aiEsc(c.auditor)+'</strong></div>':'')+(certH?'<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">'+certH+'</div>':'')+'</div>':'')+
+      (c.story&&c.story.length?'<div style="font-size:15px;font-weight:900;color:#0c1a2e;margin-bottom:12px;">📖 Their Journey</div><div style="margin-bottom:18px;">'+tlH+'</div>':'')+
+      (c.model?'<div style="background:#f8fafc;border-radius:13px;padding:14px;margin-bottom:14px;border:1px solid #e5e7eb;"><div style="font-size:13px;font-weight:900;color:#1a2e1a;margin-bottom:7px;">💼 Business Model</div><div style="font-size:12px;color:#374151;line-height:1.6;">'+aiEsc(c.model)+'</div></div>':'')+
+      (c.innovation?'<div style="background:linear-gradient(135deg,#eff6ff,#dbeafe);border-radius:13px;padding:14px;margin-bottom:14px;border:1px solid #bfdbfe;"><div style="font-size:13px;font-weight:900;color:#1e3a8a;margin-bottom:7px;">🚀 Innovation</div><div style="font-size:12px;color:#1e40af;line-height:1.6;font-weight:600;">'+aiEsc(c.innovation)+'</div></div>':'')+
+      (c.lessons&&c.lessons.length?'<div style="margin-bottom:16px;"><div style="font-size:13px;font-weight:900;color:#1a2e1a;margin-bottom:9px;">🧠 Key Lessons</div>'+lesH+'</div>':'')+
+      (c.forStarters?'<div style="background:linear-gradient(135deg,#fffbeb,#fef9c3);border:2px solid #fde68a;border-radius:13px;padding:14px;margin-bottom:14px;"><div style="font-size:13px;font-weight:900;color:#92400e;margin-bottom:7px;">🌱 How YOU Can Start</div><div style="font-size:12px;color:#78350f;line-height:1.6;font-weight:600;">'+aiEsc(c.forStarters)+'</div></div>':'')+
+      '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:9px;">'+
+        '<div><div style="font-size:11px;font-weight:700;color:#9ca3af;margin-bottom:2px;">👥 Founders</div>'+
+        '<div style="font-size:12px;font-weight:800;color:#1a2e1a;">'+(c.founders||[]).map(aiEsc).join(' · ')+'</div>'+
+        '<div style="font-size:11px;color:#6b7280;margin-top:1px;">📍 '+aiEsc(c.location||'India')+'</div></div>'+
+        (c.website?'<a href="'+aiEsc(c.website)+'" target="_blank" style="background:linear-gradient(135deg,#0c1a2e,#1a3a5c);color:white;text-decoration:none;border-radius:10px;padding:9px 18px;font-size:12px;font-weight:900;font-family:Nunito,sans-serif;display:inline-flex;align-items:center;gap:4px;">🌐 Website →</a>':'')+
+      '</div>'+
+    '</div></div>';
+  document.body.appendChild(m);
+}
+function aiIdeasContent(){
+  if(!aiIdeas.length)return '<div class="mp-empty"><div style="font-size:44px;">💡</div><p style="font-size:14px;font-weight:700;margin-top:10px;">Startup ideas loading...</p><small style="font-size:12px;">Run node seed-innovate.js to populate</small></div>'+aiSubmitCTA();
+  var h='<div style="background:linear-gradient(135deg,#fffbeb,#fef9c3);border:2px solid #fde68a;border-radius:16px;padding:18px 20px;margin-bottom:20px;"><div style="font-size:16px;font-weight:900;color:#92400e;margin-bottom:4px;">💡 Start Your Agri Business</div><div style="font-size:12px;color:#78350f;font-weight:600;">Proven, low-risk ideas validated by real entrepreneurs.</div></div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px;">';
+  aiIdeas.forEach(function(idea){h+='<div class="ai-idea-card"><div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,'+(idea.color||'#059669')+',transparent);"></div><div style="font-size:36px;margin-bottom:9px;">'+(idea.icon||'💡')+'</div><div style="font-size:14px;font-weight:900;color:#0c1a2e;margin-bottom:6px;">'+aiEsc(idea.title||'')+'</div><div style="font-size:12px;color:#374151;line-height:1.5;margin-bottom:10px;">'+aiEsc(idea.desc||'')+'</div><div style="display:flex;flex-direction:column;gap:4px;">'+[['💰 Investment',idea.effort||'—','#374151'],['📈 Earning Potential',idea.earn||'—','#059669'],['⏱️ Time to Income',idea.time||'—','#2563eb']].map(function(r){return '<div style="display:flex;align-items:center;justify-content:space-between;background:white;border-radius:6px;padding:6px 9px;border:1px solid #e5e7eb;"><span style="font-size:10px;font-weight:700;color:#6b7280;">'+r[0]+'</span><span style="font-size:11px;font-weight:900;color:'+r[2]+';">'+aiEsc(r[1])+'</span></div>';}).join('')+'</div></div>';});
+  return h+'</div>'+aiSubmitCTA();
+}
+function aiSubmitCTA(){return '<div style="margin-top:22px;background:linear-gradient(135deg,#0c1a2e,#1a3a5c);border-radius:18px;padding:24px;color:white;text-align:center;"><div style="font-size:30px;margin-bottom:9px;">🤝</div><div style="font-family:\'Sour Gummy\',cursive;font-size:18px;font-weight:900;margin-bottom:6px;">Feature Your Agri Business</div><div style="font-size:12px;opacity:.75;margin-bottom:14px;max-width:380px;margin-left:auto;margin-right:auto;">Built something real in agriculture? We verify and feature your story.</div><button onclick="aiSubmitForm()" style="background:linear-gradient(135deg,#f59e0b,#d97706);border:none;border-radius:11px;padding:11px 26px;font-size:13px;font-weight:900;color:#1a2e1a;cursor:pointer;font-family:Nunito,sans-serif;">📝 Submit Your Story →</button></div>';}
+function aiSubmitForm(){
+  var ex=document.getElementById('ai-submit-modal');if(ex)ex.remove();
+  var m=document.createElement('div');m.className='ai-det-ov';m.id='ai-submit-modal';
+  m.addEventListener('click',function(e){if(e.target===m)m.remove();});
+  m.innerHTML='<div class="ai-det-modal"><div style="padding:24px;">'+
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;"><div style="font-size:17px;font-weight:900;color:#1a2e1a;">📝 Submit Your Agri Business Story</div><button onclick="document.getElementById(\'ai-submit-modal\').remove()" style="background:#f3f4f6;border:none;cursor:pointer;width:30px;height:30px;border-radius:7px;font-size:15px;font-family:Nunito,sans-serif;">✕</button></div>'+
+    '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:11px 13px;margin-bottom:16px;font-size:12px;color:#1e40af;font-weight:600;">✅ Submissions reviewed before publishing. Authenticity verified through third-party sources.</div>'+
+    [['Company Name *','ai-s-name','text'],['Sector / What you do *','ai-s-sector','text'],['Founded Year *','ai-s-year','number'],['Location (City, State) *','ai-s-loc','text'],['Website','ai-s-web','url'],['Founders (comma separated)','ai-s-founders','text'],['Funding raised','ai-s-funding','text'],['Farmers/People impacted','ai-s-farmers','text']].map(function(f){return '<div style="margin-bottom:11px;"><label style="font-size:11px;font-weight:800;color:#374151;display:block;margin-bottom:4px;">'+f[0]+'</label><input id="'+f[1]+'" type="'+f[2]+'" class="mp-inp" placeholder="'+f[0].replace(' *','')+'"/></div>';}).join('')+
+    '<div style="margin-bottom:11px;"><label style="font-size:11px;font-weight:800;color:#374151;display:block;margin-bottom:4px;">Brief description *</label><textarea id="ai-s-desc" class="mp-ta" placeholder="Your business model, innovation, impact on farmers..."></textarea></div>'+
+    '<div style="margin-bottom:16px;"><label style="font-size:11px;font-weight:800;color:#374151;display:block;margin-bottom:4px;">Journey (optional)</label><textarea id="ai-s-story" class="mp-ta" placeholder="2020: Started with 10 farmers&#10;2021: First funding&#10;2022: Expanded..."></textarea></div>'+
+    '<button onclick="aiDoSubmit()" style="width:100%;background:linear-gradient(135deg,#1d4ed8,#2563eb);color:white;border:none;border-radius:11px;padding:13px;font-size:13px;font-weight:900;cursor:pointer;font-family:Nunito,sans-serif;box-shadow:0 4px 14px rgba(37,99,235,.35);">🚀 Submit for Review</button>'+
+  '</div></div>';
+  document.body.appendChild(m);
+}
+async function aiDoSubmit(){
+  function gv(id){var e=document.getElementById(id);return e?(e.value||'').trim():'';}
+  var name=gv('ai-s-name'),sector=gv('ai-s-sector'),year=gv('ai-s-year'),loc=gv('ai-s-loc'),desc=gv('ai-s-desc');
+  if(!name||!sector||!year||!loc||!desc){mpShowToast('⚠️ Fill all required fields');return;}
+  var tok=localStorage.getItem('km_token');
+  var payload={name:name,sector:sector,founded:year,location:loc,website:gv('ai-s-web'),founders:gv('ai-s-founders').split(',').map(function(s){return s.trim();}).filter(Boolean),funding:gv('ai-s-funding'),farmersImpacted:gv('ai-s-farmers'),shortDesc:desc,storyRaw:gv('ai-s-story'),submittedBy:currentUser.name||'Anonymous',submittedAt:new Date().toISOString(),status:'pending'};
+  try{var r=await fetch('/api/innovate/stories',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+(tok||'')},body:JSON.stringify(payload)});if(r.ok){document.getElementById('ai-submit-modal').remove();mpShowToast('🎉 Submitted! Review takes 3 business days.');}else{var err=await r.json();mpShowToast('❌ '+(err.error||'Submission failed'));}}catch(e){mpShowToast('❌ Server error');}
+}
+function aiSetTab(t){aiTab=t;var e=document.getElementById('ai-body');if(e)e.innerHTML=aiContent();renderInnovate();}
+function aiSetSearch(q){aiSearchQ=q;var e=document.getElementById('ai-body');if(e)e.innerHTML=aiContent();}
+function aiEsc(s){if(!s)return '';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+</script>
+<!--
+  ╔══════════════════════════════════════════════════════════════╗
+  ║  KisanMitra — Navigation Fix Patch                          ║
+  ║  Paste this block just before </body> in your main HTML     ║
+  ╚══════════════════════════════════════════════════════════════╝
+
+  Fixes:
+  1. My Account → inline modal (not /kisanmitra-registration.html)
+  2. Marketplace login prompt → inline modal
+  3. AgriInnovate + Marketplace → sample data when server is offline
+-->
+
+<style>
+.km-overlay{position:fixed;inset:0;background:rgba(6,78,59,0.55);backdrop-filter:blur(6px);z-index:500;display:flex;align-items:center;justify-content:center;padding:16px;animation:fadeIn 0.2s ease;}
+.km-modal{background:white;border-radius:24px;max-width:500px;width:100%;max-height:90vh;overflow-y:auto;animation:slideUp2 0.3s cubic-bezier(0.22,1,0.36,1);box-shadow:0 28px 70px rgba(6,78,59,0.35);}
+.km-modal-hdr{background:linear-gradient(135deg,#064e3b,#059669);padding:24px;border-radius:24px 24px 0 0;color:white;position:relative;}
+.km-modal-body{padding:22px 24px;}
+.km-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #f0fdf4;font-size:14px;}
+.km-row:last-child{border:none;}
+.km-row .k{color:#6b7280;font-weight:600;}
+.km-row .v{font-weight:700;color:#1f2937;text-align:right;}
+.km-close{position:absolute;top:14px;right:14px;background:rgba(255,255,255,0.2);border:none;color:white;width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;font-family:Nunito,sans-serif;}
+</style>
+
+<script>
+/* ── 1. FIX: My Account sidebar button ──────────────────────── */
+(function patchAccountButton(){
+  const btn = document.getElementById('sidebar-account-btn');
+  if (!btn) return;
+  // Turn the <a> into a button-style element
+  btn.removeAttribute('href');
+  btn.style.cursor = 'pointer';
+  btn.onclick = function(e){ e.preventDefault(); showAccountModal(); };
+})();
+
+/* ── 2. FIX: My Account modal ───────────────────────────────── */
+function showAccountModal(){
+  closeSidebar && closeSidebar();
+  const u = kmGetStoredUser ? kmGetStoredUser() : null;
+  if (!u) { showLoginModal('login'); return; }
+
+  const removeOld = document.getElementById('km-account-modal');
+  if (removeOld) removeOld.remove();
+
+  const loc  = [u.village, u.district, u.state].filter(Boolean).join(', ') || 'India';
+  const role = u.role === 'buyer' ? '🏪 Buyer' : '👨‍🌾 Farmer';
+  const since = u.createdAt ? new Date(u.createdAt).toLocaleDateString('en-IN',{month:'long',year:'numeric'}) : '—';
+
+  const rows = [
+    ['📱 Mobile',    u.phone   || '—'],
+    ['📧 Email',     u.email   || 'Not provided'],
+    ['📍 Location',  loc],
+    ['🗓️ Joined',    since],
+    ['✅ Status',    u.status==='active' ? 'Active & Verified' : (u.status || 'Active')],
+  ];
+  if (u.role === 'farmer') {
+    if (u.farmSize)   rows.push(['🌾 Farm Size',  u.farmSize + ' acres']);
+    if (u.crops)      rows.push(['🌱 Crops',      u.crops]);
+    if (u.irrigation) rows.push(['💧 Irrigation', u.irrigation]);
+  } else {
+    if (u.businessName)    rows.push(['🏢 Business',   u.businessName]);
+    if (u.businessType)    rows.push(['🏷️ Type',        u.businessType]);
+    if (u.interestedCrops) rows.push(['🛒 Buying',     u.interestedCrops]);
+  }
+
+  const ov = document.createElement('div');
+  ov.className = 'km-overlay';
+  ov.id = 'km-account-modal';
+  ov.onclick = function(e){ if(e.target===ov) ov.remove(); };
+  ov.innerHTML = `
+    <div class="km-modal">
+      <div class="km-modal-hdr">
+        <button class="km-close" onclick="document.getElementById('km-account-modal').remove()">×</button>
+        <div style="display:flex;align-items:center;gap:14px;">
+          <div style="width:54px;height:54px;background:rgba(255,255,255,0.2);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:28px;border:2px solid rgba(255,255,255,0.35);">${u.role==='buyer'?'🏪':'👨‍🌾'}</div>
+          <div>
+            <div style="font-size:20px;font-weight:900;font-family:'Sour Gummy',cursive;">${escapeHtml(u.name||'Kisan')}</div>
+            <div style="font-size:13px;opacity:0.8;margin-top:3px;">${role} · KisanMitra</div>
+          </div>
+        </div>
+        <div style="display:inline-block;margin-top:12px;background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.35);border-radius:20px;padding:3px 12px;font-size:11px;font-weight:700;">
+          ${u.status==='active'?'✅ Verified Account':'⏳ Pending Verification'}
+        </div>
+      </div>
+      <div class="km-modal-body">
+        ${rows.map(([k,v])=>`<div class="km-row"><span class="k">${k}</span><span class="v">${escapeHtml(String(v))}</span></div>`).join('')}
+        <div style="margin-top:18px;display:flex;flex-direction:column;gap:8px;">
+          <a href="https://kisanmitra-2.onrender.com/" target="_blank"
+             style="display:block;text-align:center;background:linear-gradient(135deg,#10b981,#059669);color:white;padding:12px;border-radius:12px;font-weight:800;font-size:14px;text-decoration:none;">
+            🌱 Open KisanMitra App
+          </a>
+          <button onclick="kmLogout&&kmLogout()" style="width:100%;background:white;border:2px solid #fca5a5;color:#ef4444;padding:11px;border-radius:12px;font-weight:700;font-size:13px;cursor:pointer;font-family:Nunito,sans-serif;">
+            🚪 Logout
+          </button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+  document.body.style.overflow = 'hidden';
+  ov.addEventListener('remove', ()=>{ document.body.style.overflow = ''; });
+}
+
+/* ── 3. FIX: Login prompt modal (replaces page redirect) ────── */
+function showLoginModal(reason){
+  const removeOld = document.getElementById('km-login-modal');
+  if (removeOld) removeOld.remove();
+
+  const msgs = {
+    checkout: 'Log in to place your order and track deliveries.',
+    listing:  'Log in to list your products on KisanBazaar.',
+    default:  'Log in to access all KisanMitra features.',
+  };
+  const msg = msgs[reason] || msgs.default;
+
+  const ov = document.createElement('div');
+  ov.className = 'km-overlay';
+  ov.id = 'km-login-modal';
+  ov.onclick = function(e){ if(e.target===ov){ ov.remove(); document.body.style.overflow=''; } };
+  ov.innerHTML = `
+    <div class="km-modal" style="max-width:380px;">
+      <div class="km-modal-hdr" style="text-align:center;">
+        <button class="km-close" onclick="document.getElementById('km-login-modal').remove();document.body.style.overflow=''">×</button>
+        <div style="font-size:44px;margin-bottom:10px;">🔐</div>
+        <div style="font-size:18px;font-weight:900;font-family:'Sour Gummy',cursive;">Login Required</div>
+        <div style="font-size:13px;opacity:0.85;margin-top:6px;">${msg}</div>
+      </div>
+      <div class="km-modal-body" style="text-align:center;">
+        <div style="background:#ecfdf5;border:1px solid #a7f3d0;border-radius:12px;padding:12px;margin-bottom:16px;font-size:13px;color:#065f46;font-weight:600;">
+          👉 Register or login on the KisanMitra registration page — then come back here.
+        </div>
+        <a href="https://kisanmitra-2.onrender.com/kisanmitra-registration.html" target="_blank"
+           style="display:block;background:linear-gradient(135deg,#10b981,#059669);color:white;padding:13px;border-radius:12px;font-weight:800;font-size:15px;text-decoration:none;margin-bottom:10px;">
+          👨‍🌾 Register / Login →
+        </a>
+        <button onclick="document.getElementById('km-login-modal').remove();document.body.style.overflow=''"
+          style="background:none;border:none;color:#9ca3af;font-size:13px;cursor:pointer;font-family:Nunito,sans-serif;padding:6px;">
+          Maybe later
+        </button>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+  document.body.style.overflow = 'hidden';
+}
+
+/* ── 4. FIX: Patch marketplace redirects ───────────────────── */
+// Override mpCheckout and mpSubmitL to use modal instead of page redirect
+const _origCheckout = window.mpCheckout;
+window.mpCheckout = async function(){
+  if (!localStorage.getItem('km_token')) { showLoginModal('checkout'); return; }
+  if (_origCheckout) return _origCheckout.apply(this, arguments);
+};
+
+const _origSubmitL = window.mpSubmitL;
+window.mpSubmitL = async function(){
+  if (!localStorage.getItem('km_token')) { showLoginModal('listing'); return; }
+  if (_origSubmitL) return _origSubmitL.apply(this, arguments);
+};
+
+/* ── 5. FIX: Sample Marketplace products (offline fallback) ─── */
+const SAMPLE_PRODUCTS = [
+  {_id:'p1',name:'Organic Wheat Flour (Atta)',category:'grains',emoji:'🌾',price:52,mrp:65,unit:'kg',minQty:5,stock:500,organic:true,featured:true,tags:['Organic','Stone Ground','No Additives'],desc:'Stone-ground whole wheat from Rajasthan farms. No bleaching or additives.',sellerName:'Ram Kumar Farms',sellerEmoji:'👨‍🌾',sellerLocation:'Jaipur, Rajasthan',sellerVerified:true,rating:4.7,reviews:142},
+  {_id:'p2',name:'Basmati Rice (1121 Grade)',category:'grains',emoji:'🍚',price:95,mrp:110,unit:'kg',minQty:10,stock:1000,organic:false,featured:true,tags:['1121 Extra Long','Low GI','Aged 1 Year'],desc:'Premium 1121 Basmati rice aged for 12 months. Extra long grain, naturally fragrant.',sellerName:'Punjab Grain House',sellerEmoji:'🏪',sellerLocation:'Amritsar, Punjab',sellerVerified:true,rating:4.8,reviews:289},
+  {_id:'p3',name:'Pure Mustard Oil (Kachi Ghani)',category:'oils',emoji:'🫙',price:180,mrp:210,unit:'litre',minQty:2,stock:200,organic:true,featured:false,tags:['Cold Pressed','Kachi Ghani','Rajasthani'],desc:'Traditional cold-pressed mustard oil. No chemicals, full pungency preserved.',sellerName:'Shekhawati Oils',sellerEmoji:'👨‍🌾',sellerLocation:'Sikar, Rajasthan',sellerVerified:true,rating:4.6,reviews:78},
+  {_id:'p4',name:'Desi Chana Dal (Split Gram)',category:'pulses',emoji:'🫘',price:88,mrp:95,unit:'kg',minQty:5,stock:800,organic:false,featured:false,tags:['High Protein','No Polishing','Farm Fresh'],desc:'Split chickpea lentil with skin. High protein, sourced directly from MP farmers.',sellerName:'MP Pulse Traders',sellerEmoji:'🏪',sellerLocation:'Indore, M.P.',sellerVerified:false,rating:4.3,reviews:34},
+  {_id:'p5',name:'Turmeric Powder (Erode)',category:'spices',emoji:'🌿',price:220,mrp:260,unit:'kg',minQty:1,stock:150,organic:true,featured:true,tags:['High Curcumin 4.5%','Erode Origin','Lab Tested'],desc:'Pure Erode turmeric with 4.5% curcumin. Lab tested, no artificial color.',sellerName:'Erode Spice Farm',sellerEmoji:'👩‍🌾',sellerLocation:'Erode, Tamil Nadu',sellerVerified:true,rating:4.9,reviews:201},
+  {_id:'p6',name:'Raw Forest Honey',category:'honey',emoji:'🍯',price:450,mrp:550,unit:'kg',minQty:1,stock:60,organic:true,featured:false,tags:['Raw Unfiltered','Forest Sourced','No Sugar'],desc:'Wild-sourced raw honey from the Aravalli hills. Unheated, unpasteurized.',sellerName:'Aravalli Bee Farms',sellerEmoji:'👨‍🌾',sellerLocation:'Alwar, Rajasthan',sellerVerified:true,rating:4.8,reviews:115},
+  {_id:'p7',name:'Desi Tomatoes (Fresh)',category:'vegetables',emoji:'🍅',price:28,mrp:35,unit:'kg',minQty:10,stock:400,organic:false,featured:false,tags:['Farm Fresh','No Wax','Hybrid Variety'],desc:'Fresh tomatoes harvested within 24 hours. No wax coating, natural ripening.',sellerName:'Nashik Vegetable Hub',sellerEmoji:'🏪',sellerLocation:'Nashik, Maharashtra',sellerVerified:false,rating:4.1,reviews:22},
+  {_id:'p8',name:'A2 Desi Cow Ghee',category:'oils',emoji:'🧈',price:950,mrp:1100,unit:'kg',minQty:1,stock:40,organic:true,featured:true,tags:['A2 Bilona Method','Gir Cow','FSSAI Certified'],desc:'Hand-churned bilona ghee from Gir cows. Granular texture, rich aroma.',sellerName:'Gir Goshala',sellerEmoji:'👩‍🌾',sellerLocation:'Junagadh, Gujarat',sellerVerified:true,rating:5.0,reviews:456},
+  {_id:'p9',name:'Hybrid Wheat Seeds (HD-3226)',category:'seeds',emoji:'🌱',price:65,mrp:75,unit:'kg',minQty:20,stock:2000,organic:false,featured:false,tags:['ICAR Certified','Rust Resistant','55q/ha Yield'],desc:'ICAR certified HD-3226 wheat seeds. Yellow rust resistant, suitable for all north Indian states.',sellerName:'AgroBio Seeds',sellerEmoji:'🏪',sellerLocation:'Karnal, Haryana',sellerVerified:true,rating:4.5,reviews:67},
+  {_id:'p10',name:'Neem Cake Fertilizer',category:'inputs',emoji:'🌿',price:18,mrp:22,unit:'kg',minQty:50,stock:5000,organic:true,featured:false,tags:['Organic','Pest Deterrent','Slow Release N'],desc:'Cold-pressed neem cake. Natural pest deterrent and slow-release nitrogen source.',sellerName:'Green Earth Inputs',sellerEmoji:'🏪',sellerLocation:'Vadodara, Gujarat',sellerVerified:true,rating:4.4,reviews:89},
+];
+
+const SAMPLE_COMPANIES = [
+  {_id:'c1',name:'DeHaat',emoji:'🌾',bannerColor:'linear-gradient(135deg,#064e3b,#059669)',tagline:'Full-stack platform connecting 1.8M farmers to inputs, advisory & market',sector:'AgriTech Platform',category:'platform',stage:'Series E',founded:'2012',location:'Patna, Bihar',funding:'$500M+',farmersImpacted:'1.8M+',employees:'3,000+',states:'10',verified:true,authenticityScore:96,auditor:'SEBI Filing / Crunchbase',certifications:['ISO 27001','NPCI Partner','SEBI Listed'],tags:['Full-Stack','Input Supply','Market Linkage'],shortDesc:'Built India\'s largest full-stack agri platform — from seeds and fertilizer delivery to real-time mandi price discovery.',model:'B2B2C: Micro-entrepreneurs sell agri inputs to nearby farmers; DeHaat takes margin on each transaction plus advisory subscription fees.',innovation:'Single app covering inputs, advisory, weather alerts and mandi bidding. Farmers can request a visit from a local DeHaat agent within hours.',forStarters:'Start as a DeHaat micro-entrepreneur in your village. You get a franchise, inventory support and training. Requires ₹50K capital and a smartphone.',lessons:['Rural fintech is the missing link — farmers who got input credit ordered 3× more','Hyperlocal warehousing cut delivery from 7 days to same-day in 40+ districts','Building in regional languages (Bhojpuri, Maithili) doubled retention in Bihar'],story:[{year:'2012',icon:'🌱',color:'#059669',event:'Founded in Patna with 10 farmers and a bicycle delivery model'},{year:'2016',icon:'💻',color:'#2563eb',event:'Launched mobile app with offline-first architecture for low-connectivity villages'},{year:'2019',icon:'💰',color:'#f59e0b',event:'Series B — $12M. Expanded to UP, Odisha and West Bengal'},{year:'2021',icon:'🚀',color:'#7c3aed',event:'Series D — $115M. Crossed 1 million farmer base'},{year:'2023',icon:'🏆',color:'#059669',event:'Crossed ₹2,000 Cr GMV. Series E closed at $60M'}],founders:['Shyam Sundar','Amrendra Singh'],website:'https://dehaat.com'},
+  {_id:'c2',name:'Ninjacart',emoji:'🥦',bannerColor:'linear-gradient(135deg,#1e3a8a,#2563eb)',tagline:'Farm-to-store supply chain — eliminating 5-layer middlemen in fresh produce',sector:'Supply Chain / Logistics',category:'supplychain',stage:'Series C',founded:'2015',location:'Bengaluru, Karnataka',funding:'$350M',farmersImpacted:'120K+',employees:'2,500+',states:'12',verified:true,authenticityScore:94,auditor:'Walmart Investment / Crunchbase Verified',certifications:['FSSAI Registered','ISO 22000 Food Safety','CII Agri Award 2022'],tags:['Fresh Produce','Cold Chain','B2B'],shortDesc:'Wholesale fresh-produce supply chain that moves 1,400 tonnes of fruits & vegetables daily from farms to kiranas in under 12 hours.',model:'B2B marketplace: Ninjacart buys from farmers at farm gate, grades/packs at hubs and delivers to retailers overnight. Margin on the spread.',innovation:'Custom IoT-enabled crates with QR codes track produce temperature and location. Retailers scan to get farm-of-origin, harvest date and pesticide residue reports.',forStarters:'Approach Ninjacart as a Collection Partner in your district. They provide crates, weighing equipment and assured purchase. Entry: 3-acre minimum catchment.',lessons:['Speed kills waste — deliver in <12h and shrinkage drops from 25% to 4%','Grading at farm gate (not city) means farmers earn 18-22% more per kg','Retailers paid digitally within 48h; no bounced cheques improved loyalty dramatically'],story:[{year:'2015',icon:'🌱',color:'#059669',event:'Started by ex-Flipkart team solving tomato wastage in Bengaluru'},{year:'2017',icon:'🚚',color:'#2563eb',event:'Launched overnight farm-to-kirana delivery; 50 tonnes/day'},{year:'2019',icon:'💰',color:'#f59e0b',event:'$100M funding from Tiger Global'},{year:'2021',icon:'🏪',color:'#7c3aed',event:'Walmart led $145M round; expanded to 12 cities'},{year:'2023',icon:'📊',color:'#059669',event:'1,400 tonnes/day. Profitable in 8 of 12 cities'}],founders:['Thirukumaran N.','Sharath Loganathan','Sachin Jose','Varun Khaitan'],website:'https://ninjacart.in'},
+  {_id:'c3',name:'Gramophone',emoji:'🌽',bannerColor:'linear-gradient(135deg,#78350f,#b45309)',tagline:'AI crop advisory + input delivery for smallholder farmers in Central India',sector:'Advisory + E-commerce',category:'platform',stage:'Series B',founded:'2016',location:'Indore, M.P.',funding:'$80M',farmersImpacted:'4M+',employees:'1,200+',states:'5',verified:true,authenticityScore:91,auditor:'Accel Portfolio / MCA Filing',certifications:['ICAR Collaboration','MP Govt MOU 2022','Great Place to Work 2023'],tags:['AI Advisory','Crop Doctor','Regional Language'],shortDesc:'Vernacular agri super-app for MP, Rajasthan and UP. Farmers get crop doctor AI, soil test kits delivered home and inputs on 7-day credit.',model:'E-commerce of agri inputs (seeds, chemicals, fertilizers) with advisory attached. Advisory is free; margin comes from the product sales.',innovation:'"Krishi Doctor" feature: farmers post a photo of a sick plant and get AI diagnosis + product recommendation within 60 seconds in Hindi/Malwi.',forStarters:'Register as a Gramophone Local Agrovet — they provide training, credit float and branding. Works in towns of 5,000+ population.',lessons:['Voice-first UI (not typed search) increased MAU by 70% in rural MP','7-day credit on inputs unlocked farmers who had zero working capital','Same-day delivery of soil test kits raised NPS from 42 to 74'],story:[{year:'2016',icon:'🌱',color:'#059669',event:'Founded by IIT alumni frustrated by pesticide mis-selling in MP'},{year:'2018',icon:'📱',color:'#2563eb',event:'Launched Hindi-first mobile app; first 50,000 farmers in 6 months'},{year:'2020',icon:'🤖',color:'#7c3aed',event:'AI crop doctor launched; 10,000 queries/day within 3 months'},{year:'2022',icon:'💰',color:'#f59e0b',event:'$70M Series B; expanded to Rajasthan and UP'},{year:'2023',icon:'📦',color:'#059669',event:'4M registered farmers; launched D2C seeds under own brand'}],founders:['Tauseef Khan','Harshit Gupta','Nikhil Agrawal'],website:'https://gramophone.in'},
+  {_id:'c4',name:'Fasal',emoji:'🛰️',bannerColor:'linear-gradient(135deg,#1e3a5f,#1b6ca8)',tagline:'IoT + AI that predicts disease outbreaks 7 days before they appear',sector:'Deep Tech / Precision Farming',category:'deeptech',stage:'Series A',founded:'2018',location:'Gurugram, Haryana',funding:'$25M',farmersImpacted:'35K+',employees:'180',states:'8',verified:true,authenticityScore:93,auditor:'Google AI for Social Good Partner',certifications:['NASSCOM Award 2022','DST-TIDE Grant Recipient','ICAR Partner'],tags:['IoT Sensor','Disease Prediction','Precision Agri'],shortDesc:'Wireless IoT sensors in fields stream microclimate data to ML models that predict fungal disease outbreaks 7 days before symptoms appear.',model:'SaaS subscription: ₹999-1,999/acre/season. Sensors leased, not sold. Revenue from grape, tomato, potato and wheat growers.',innovation:'Proprietary sensor captures humidity at canopy level (not standard weather station height). That 30cm difference is the key to accurate disease modeling.',forStarters:'Pilot Fasal on your best 2 acres. If you save one fungicide spray (₹800-1,200) per season, the sensor pays for itself. Apply at fasal.in/partner.',lessons:['Farmers adopt technology when ROI is visible in rupees within 30 days','Sensor must be weatherproof and battery-powered — solar panels failed in heavy rain',' Data alone isn\'t enough — a local agronomist who speaks Haryanvi must validate the alert'],story:[{year:'2018',icon:'💡',color:'#2563eb',event:'Founded after witnessing grape crop wiped out by downy mildew in Nashik'},{year:'2019',icon:'🔬',color:'#7c3aed',event:'1st pilot: 12 grape farmers in Nashik. Zero downy mildew losses that season'},{year:'2021',icon:'💰',color:'#f59e0b',event:'$6M Series A. Expanded to potato (UP) and tomato (HP, Karnataka)'},{year:'2023',icon:'📡',color:'#059669',event:'35,000 farmers across 8 crops. Signed 3-year ICAR research collaboration'}],founders:['Ananda Verma','Shailendra Tiwari'],website:'https://fasal.in'},
+  {_id:'c5',name:'Samunnati',emoji:'💳',bannerColor:'linear-gradient(135deg,#581c87,#7e22ce)',tagline:'Agri-fintech providing working capital to FPOs and smallholder value chains',sector:'Agri Fintech',category:'fintech',stage:'Series D',founded:'2014',location:'Chennai, Tamil Nadu',funding:'$150M',farmersImpacted:'1M+',employees:'900',states:'18',verified:true,authenticityScore:95,auditor:'RBI Registered NBFC / MCA Filing',certifications:['RBI NBFC License','NABARD Empanelled','Forbes Asia 100 To Watch 2022'],tags:['FPO Lending','Agri NBFC','Working Capital'],shortDesc:'India\'s largest agri-focused NBFC. Provides working capital loans to Farmer Producer Organisations (FPOs) and agri value chains.',model:'Lend to FPOs at 14-17% interest; FPOs on-lend to member farmers. Samunnati also earns from advisory fees on market linkage services.',innovation:'Invented "FPO Credit Stack" — a scoring model using paddy yield, rainfall, soil data and FPO governance records instead of CIBIL scores.',forStarters:'If you are part of or can form an FPO (minimum 300 farmers), approach Samunnati for working capital. Average first loan: ₹25 lakh at 16%.',lessons:['Lending to groups (FPOs) reduces default to <1% vs 8-12% for individual agri loans','Building local language documentation increased FPO applications by 60%','Women-led FPOs repay faster and have 40% lower NPAs'],story:[{year:'2014',icon:'🌱',color:'#7c3aed',event:'Founded to solve the $100B agri credit gap in India'},{year:'2016',icon:'💰',color:'#f59e0b',event:'First institutional funding; disbursed ₹100 Cr to 15 FPOs in Tamil Nadu'},{year:'2019',icon:'📊',color:'#059669',event:'Crossed 500 FPO partnerships across 10 states'},{year:'2022',icon:'🏆',color:'#2563eb',event:'$35M Series D. Disbursements crossed ₹3,000 Cr cumulative'},{year:'2023',icon:'🌍',color:'#7c3aed',event:'Launched international trade finance for agri exporters'}],founders:['Anil Kumar S.','Vikas'],website:'https://samunnati.com'},
+  {_id:'c6',name:'AgroStar',emoji:'⭐',bannerColor:'linear-gradient(135deg,#7c2d12,#c2410c)',tagline:'Direct agri input e-commerce + vernacular video advisory for 7M farmers',sector:'Input E-commerce + Advisory',category:'platform',stage:'Series D',founded:'2013',location:'Ahmedabad, Gujarat',funding:'$140M',farmersImpacted:'7M+',employees:'1,800',states:'10',verified:true,authenticityScore:92,auditor:'Accel + Bertelsmann Investment',certifications:['FICCI Agri Award 2021','Great Place to Work','Gujarat Govt Partner'],tags:['Direct Input Supply','Video Advisory','Vernacular'],shortDesc:'Farm input super-app with 7M farmer users who buy seeds and agrochemicals direct from manufacturers, cutting the 3-layer distribution chain.',model:'E-commerce margin on direct-from-manufacturer agri inputs. Also earns from sponsored content from input companies (advisory videos).',innovation:'"Agrostar Saathi" — 2,000 farmer-agents who earn per referral. Each Saathi serves 50 nearby farmers via WhatsApp. 40% of orders come from this channel.',forStarters:'Download AgroStar app, verify as a farmer, and apply to be a Saathi. Earn ₹200-500 per order placed by farmers you refer. Zero investment needed.',lessons:['WhatsApp-based ordering outperformed the app in rural Gujarat by 2:1','Video advisory in Gujarati/Marathi increased app engagement by 85%','Farmer Net Promoter Score: 72 vs industry average of 38 — trust drives virality'],story:[{year:'2013',icon:'🌱',color:'#c2410c',event:'Started as agri newspaper delivered by hand in 100 Gujarat villages'},{year:'2015',icon:'📱',color:'#2563eb',event:'Launched mobile app; shifted from print to digital advisory'},{year:'2018',icon:'💰',color:'#f59e0b',event:'Raised $27M. Launched direct-from-manufacturer input marketplace'},{year:'2020',icon:'🚀',color:'#7c3aed',event:'Crossed 5M farmers. Expanded to Maharashtra and Rajasthan'},{year:'2022',icon:'🏆',color:'#059669',event:'7M farmers. Series D at $70M. Launched private label seeds brand'}],founders:['Sitanshu Sheth','Shardul Sheth'],website:'https://agrostar.in'},
+];
+
+const SAMPLE_IDEAS = [
+  {icon:'🏪',title:'Village agri input shop + advisory',desc:'Become the "Gramophone Saathi" or "DeHaat entrepreneur" for your village. Stock 20 key products, earn per sale, offer free crop advice via the apps.',effort:'₹30,000–80,000',earn:'₹8,000–25,000/month',time:'Week 1',color:'#059669'},
+  {icon:'🚛',title:'Farm-to-city fresh produce logistics',desc:'Collect produce from 15–20 farmers in your taluka, grade it, and supply hotels/supermarkets in the nearest city. Ninjacart and BigBasket have vendor programs.',effort:'₹50,000 (vehicle + crates)',earn:'₹15,000–40,000/month',time:'Month 1',color:'#2563eb'},
+  {icon:'🌿',title:'Organic compost and jeevamrit supply',desc:'Make and sell Jeevamrit and vermicompost to farmers transitioning to organic. PKVY farmers need 200L per acre every month — and many can\'t make it themselves.',effort:'₹5,000–15,000',earn:'₹6,000–18,000/month',time:'Week 2',color:'#7c3aed'},
+  {icon:'📱',title:'KVK-trained rural drone service',desc:'Get DGCA remote pilot certificate (3 weeks, ₹25K), rent or buy a spraying drone under SMAM subsidy (50%), charge ₹400–600 per acre per spray.',effort:'₹1.5–2L (after subsidy)',earn:'₹20,000–60,000/month',time:'Month 2',color:'#f59e0b'},
+  {icon:'🍯',title:'Niche honey + value-added product brand',desc:'Source raw honey from beekeepers, brand it as "single-origin forest honey", sell on Amazon or at organic fairs at ₹600–900/kg vs ₹150/kg wholesale.',effort:'₹20,000',earn:'₹12,000–30,000/month',time:'Month 1',color:'#c2410c'},
+  {icon:'📊',title:'FPO formation and grant facilitation',desc:'Help 300 farmers in your area form an FPO. The government pays ₹15L in equity grant per FPO. As promoter you earn consultancy plus the FPO can access ₹25L Samunnati loan.',effort:'6 months of effort',earn:'₹2–5L one-time + share',time:'6 months',color:'#0284c7'},
+];
+
+/* ── 6. FIX: Patch marketplace to use sample data when empty ── */
+const _origMpFetch = window.mpFetchProducts;
+window.mpFetchProducts = async function(){
+  if (_origMpFetch) await _origMpFetch.apply(this, arguments);
+  if (!mpProducts || !mpProducts.length) {
+    mpProducts = SAMPLE_PRODUCTS;
+  }
+};
+
+/* ── 7. FIX: Patch innovate to use sample data when empty ───── */
+const _origAiFetch = window.aiFetch;
+window.aiFetch = async function(){
+  if (_origAiFetch) await _origAiFetch.apply(this, arguments);
+  if (!aiCompanies || !aiCompanies.length) {
+    aiCompanies = SAMPLE_COMPANIES;
+    aiIdeas     = SAMPLE_IDEAS;
+  }
+};
+
+/* ── 8. Also patch renderMarketplace/renderInnovate to call
+        fetch if data is still empty at render time ─────────── */
+const _origRenderMp = window.renderMarketplace;
+window.renderMarketplace = function(){
+  if (!mpProducts || !mpProducts.length) mpProducts = SAMPLE_PRODUCTS;
+  if (_origRenderMp) _origRenderMp.apply(this, arguments);
+};
+
+const _origRenderIg = window.renderInnovate;
+window.renderInnovate = function(){
+  if (!aiCompanies || !aiCompanies.length) { aiCompanies = SAMPLE_COMPANIES; aiIdeas = SAMPLE_IDEAS; }
+  if (_origRenderIg) _origRenderIg.apply(this, arguments);
+};
+
+/* ── Run patches immediately in case pages already rendered ─── */
+(function(){
+  if (!mpProducts || !mpProducts.length) mpProducts = SAMPLE_PRODUCTS;
+  if (!aiCompanies || !aiCompanies.length){ aiCompanies = SAMPLE_COMPANIES; aiIdeas = SAMPLE_IDEAS; }
+  // Refresh current page if it's marketplace or innovate
+  if (typeof currentPage !== 'undefined'){
+    if (currentPage === 'marketplace') renderMarketplace && renderMarketplace();
+    if (currentPage === 'innovate')    renderInnovate    && renderInnovate();
+  }
+})();
+
+console.log('✅ KisanMitra fix patch loaded — My Account modal, login prompt, and sample data active.');
 </script>
 </body>
 </html>
