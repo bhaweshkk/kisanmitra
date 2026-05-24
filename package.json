@@ -1,6 +1,5 @@
 {
   "dependencies": {
-    "mongodb": "^4.17.2",
-    "mongoose": "^8.0.0"
+    "pg": "^8.21.0"
   }
 }
