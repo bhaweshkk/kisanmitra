@@ -1,4 +1,4 @@
-# KisanMitra Server
+# Kisan Mitra 
 
 KisanMitra aims to solve these issues by creating a centralized full-stack digital solution using modern, accessible, and lightweight technologies. KisanMitra is a full-stack agricultural web application developed to bridge the communication gap between Indian farmers and modern digital technology. The platform consolidates essential agricultural services including real-time weather updates, live mandi price tracking, AI-powered crop advisory, community networking, government scheme information, digital document management, and an online marketplace called KisanBazaar. It also features AgriInnovate, a section dedicated to sharing agricultural startup ideas and success stories.
 
