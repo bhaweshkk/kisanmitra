@@ -1,14 +1,3 @@
-/**
- * seed-innovate.js — Run ONCE to seed initial companies & startup ideas
- * 
- * Usage:  node seed-innovate.js
- * 
- * This seeds MongoDB Atlas collections for innovate companies and ideas.
- * After seeding, data is stored in the connected MongoDB cluster.
- * 
- * Run from your project root:  node seed-innovate.js
- */
-
 const { loadEnv } = require('./lib/env');
 const { connectDB, collection } = require('./db');
 
@@ -20,7 +9,6 @@ async function runSeed() {
   const companies = collection('innovate_companies');
   const ideas = collection('innovate_ideas');
 
-  // ── Clear existing data first ──────────────────────────────────
   console.log('Clearing existing innovate data...');
   const existingCompanies = await companies.find({});
   for (const c of existingCompanies) {
@@ -31,7 +19,6 @@ async function runSeed() {
     await ideas.removeById(i._id);
   }
 
-// ── Seed Companies ─────────────────────────────────────────────
 const COMPANIES = [
   {
     name: 'DeHaat',
