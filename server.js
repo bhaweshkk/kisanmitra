@@ -1,20 +1,3 @@
-/**
- * KisanMitra server.js — v6 (MongoDB + permanent storage)
- *
- * All data routes now store permanently via db.js (MongoDB or JSON).
- * Every route has try/catch — no more 500 "Internal server errors".
- *
- * ROUTES:
- *   Auth:        POST /api/auth/register|login   GET /api/auth/me
- *   Community:   GET/POST /api/groups            GET/POST /api/groups/:id/messages
- *   Marketplace: GET/POST /api/marketplace/products
- *                GET/POST /api/marketplace/orders    GET /api/marketplace/orders/mine
- *   Innovate:    GET /api/innovate/companies     POST /api/innovate/stories
- *                GET /api/innovate/stories (admin)   PATCH /api/innovate/stories/:id (admin)
- *   Docs:        All existing /api/docs/* routes
- *   Admin:       All existing /api/admin/* routes
- *   Plugins:     GET /api/plugins   POST /api/plugins/:name
- */
 'use strict';
 
 const { loadEnv } = require('./lib/env');
@@ -36,14 +19,12 @@ const auth            = require('./lib/auth');
 const { validate }    = require('./lib/validator');
 const db              = require('./db');
 
-// Marketplace routes
 let mp;
 try { mp = require('./lib/marketplaceRoutes'); }
 catch(e) { console.warn('[server] marketplaceRoutes not found in lib/ — trying root'); }
 try { if(!mp) mp = require('./marketplaceRoutes'); }
 catch(e) { console.warn('[server] marketplaceRoutes not found — marketplace disabled'); mp = null; }
 
-// ── Collections (all data stored permanently) ────────────────────
 const groupsCol    = db.collection('community_groups');
 const msgsCol      = db.collection('community_messages');
 const productsCol  = db.collection('mp_products');
@@ -53,7 +34,6 @@ const ideasCol     = db.collection('innovate_ideas');
 const storiesCol   = db.collection('innovate_stories');
 const usersCol     = db.collection('users');
 
-// ── Config ───────────────────────────────────────────────────────
 const CONFIG = {
   PORT:            parseInt(process.env.PORT)       || 3000,
   HTTPS_PORT:      parseInt(process.env.HTTPS_PORT) || 3443,
@@ -68,7 +48,6 @@ const rateLimiter = new RateLimiter({
   windowMs: 60000, maxRequests: CONFIG.MAX_REQ_PER_MIN, blockDurationMs: 60000
 });
 
-// ── Helpers ──────────────────────────────────────────────────────
 function sendJSON(res, status, obj) {
   if (res.headersSent) return;
   res.writeHead(status, {
@@ -113,7 +92,6 @@ function getUser(req) {
 function requireAuth(req, res)  { const u=getUser(req); if(!u){sendJSON(res,401,{error:'Login required. Please sign in.'});return null;} return u; }
 function requireAdmin(req, res) { const u=getUser(req); if(!u||u.role!=='admin'){sendJSON(res,403,{error:'Admin access required.'});return null;} return u; }
 
-// ── Community Groups ─────────────────────────────────────────────
 function handleGetGroups(req, res) {
   try {
     let groups = groupsCol.find({}).filter(g => !g.status || g.status === 'approved');
@@ -162,7 +140,6 @@ async function handlePostMessage(req, res, gid, body) {
   } catch(e) { sendJSON(res, 500, {error:'Could not post message'}); }
 }
 
-// ── Marketplace ──────────────────────────────────────────────────
 function handleListProducts(req, res) {
   try {
     const url   = new URL('http://x'+req.url);
@@ -240,7 +217,6 @@ async function handleCreateOrder(req, res, body) {
   } catch(e) { logger.error('createOrder',{msg:e.message}); sendJSON(res, 500, {error:'Could not place order'}); }
 }
 
-// ── AgriInnovate ──────────────────────────────────────────────────
 function handleListCompanies(req, res) {
   try {
     const cos   = companiesCol.find({status:'published'});
@@ -308,7 +284,6 @@ async function handleAdminApproveStory(req, res, storyId, body) {
   } catch(e) { sendJSON(res, 500, {error:'Could not update story'}); }
 }
 
-// ── Admin: Add company directly (no seed script needed) ──────────
 async function handleAdminAddCompany(req, res, body) {
   try {
     const user = requireAdmin(req, res); if (!user) return;
@@ -381,7 +356,6 @@ async function handleAdminDeleteCompany(req, res, companyId) {
   }
 }
 
-// ── Main Router ───────────────────────────────────────────────────
 async function router(req, res, isHttps) {
   const method   = req.method.toUpperCase();
   const pathname = req.url.split('?')[0];
@@ -457,7 +431,7 @@ async function router(req, res, isHttps) {
     sendJSON(res,404,{error:`No plugin: ${pathname}`,hint:'See /api/plugins'}); return;
   }
 
-  // ── Marketplace ─────────────────────────────────────────────
+  // Marketplace 
   if (mp) {
     if (pathname==='/api/marketplace/products'          && method==='GET')    { mp.listProducts(req,res); return; }
     if (pathname==='/api/marketplace/products'          && method==='POST')   { const b=await parseBody(req).catch(()=>null); await mp.createProduct(req,res,b); return; }
@@ -474,7 +448,7 @@ async function router(req, res, isHttps) {
   sendJSON(res,405,{error:'Method not allowed'});
 }
 
-// ── Request handler ───────────────────────────────────────────────
+// Request handler 
 function makeHandler(isHttps) {
   return (req, res) => {
     const ip    = req.headers['x-forwarded-for']||req.socket.remoteAddress||'unknown';
@@ -496,7 +470,6 @@ function makeHandler(isHttps) {
   };
 }
 
-// ── Start ────────────────────────────────────────────────────────
 const openConnections = new Set();
 function trackConn(srv) {
   srv.on('connection', s => { openConnections.add(s); s.on('close', ()=>openConnections.delete(s)); });
