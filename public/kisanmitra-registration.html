@@ -285,15 +285,7 @@ tr:hover td { background:var(--gray-light); }
 </div>
 
 <script>
-/* ─── CONFIG ────────────────────────────────────────────
-   Set this to your Render server URL.
-   The page calls these endpoints:
-     POST /api/auth/register
-     POST /api/auth/login
-     GET  /api/auth/me
-     GET  /api/admin/users
-     DELETE /api/admin/contacts/:id
-────────────────────────────────────────────────────── */
+
 const SERVER = 'https://kisanmitra-2.onrender.com';
 
 /* ─── STATE ──────────────────────────────────────────── */
@@ -326,33 +318,27 @@ async function api(method, path, body) {
   }
 }
 
-/* ─── INIT: restore session ──────────────────────────── */
 (async () => {
   const cached = Store.getUser();
   const token  = Store.getToken();
   if (!token) return;
 
-  // Show cached user instantly (fast UX, no waiting for server)
   if (cached) {
     currentUser = cached;
     afterLogin(false);
   }
 
-  // Verify with server in background
   const r = await api('GET', '/api/auth/me');
   if (r.ok && r.data && r.data.user) {
     currentUser = r.data.user;
     Store.setUser(currentUser);
-    afterLogin(false); // re-apply in case role changed
+    afterLogin(false); 
   } else if (r.status === 401) {
-    // Token expired — clear and go to home
     Store.clear();
     if (!cached) go('home');
   }
-  // If server unreachable (status 0), keep showing cached user silently
 })();
 
-/* ─── NAV ────────────────────────────────────────────── */
 function go(page) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
@@ -384,7 +370,7 @@ function doLogout() {
   go('home');
 }
 
-/* ─── ROLE PICKER ────────────────────────────────────── */
+
 function pickRole(r) {
   currentRole = r;
   document.getElementById('rc-farmer').classList.toggle('selected', r==='farmer');
@@ -393,7 +379,7 @@ function pickRole(r) {
   document.getElementById('sec-buyer').style.display  = r==='buyer'  ? 'flex' : 'none';
 }
 
-/* ─── REGISTER ───────────────────────────────────────── */
+
 async function doRegister() {
   clearAlert('reg-alert');
   const name     = val('r-name');
@@ -444,7 +430,7 @@ async function doLogin() {
   if (!id || !pass) return showAlert('login-alert','error','Please enter your mobile number/email and password.');
   if (pass.length < 6) return showAlert('login-alert','error','Password must be at least 6 characters.');
 
-  // Build login body — send phone AND email so server can match either
+ 
   const body = { password: pass };
   const digitsOnly = id.replace(/\D/g,'');
   if (digitsOnly.length === 10) body.phone = digitsOnly;
