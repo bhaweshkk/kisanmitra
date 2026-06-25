@@ -1,10 +1,5 @@
 #!/usr/bin/env node
 
-/**
- * KisanMitra Server Process Manager
- * Provides auto-restart functionality and monitoring
- */
-
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
@@ -52,7 +47,7 @@ function startServer() {
     log(`Server exited with code ${code}, signal ${signal}, uptime: ${uptime}s`);
 
     if (code !== 0 && code !== null) {
-      // Unexpected exit
+  
       restartCount++;
       if (restartCount < MAX_RESTARTS) {
         log(`Restarting server in ${RESTART_DELAY}ms...`);
@@ -62,7 +57,7 @@ function startServer() {
         process.exit(1);
       }
     } else {
-      // Normal exit
+     
       log('Server stopped normally');
       process.exit(0);
     }
@@ -86,8 +81,6 @@ function shutdown() {
 
   if (serverProcess) {
     serverProcess.kill('SIGTERM');
-
-    // Give it time to shut down gracefully
     setTimeout(() => {
       if (!serverProcess.killed) {
         serverProcess.kill('SIGKILL');
@@ -98,8 +91,6 @@ function shutdown() {
     process.exit(0);
   }
 }
-
-// Handle shutdown signals
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
 
