@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KisanMitra — Admin</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --green: #3B6D11; --green-light: #EAF3DE; --green-mid: #639922;
+  --amber: #BA7517; --amber-light: #FAEEDA;
+  --red: #A32D2D; --red-light: #FCEBEB;
+  --blue: #185FA5; --blue-light: #E6F1FB;
+  --gray-light: #F1EFE8; --gray-mid: #D3D1C7;
+  --text: #2C2C2A; --text-muted: #888780;
+  --bg: #fff; --border: rgba(0,0,0,0.12);
+  --radius: 10px;
+}
+body { font-family: system-ui,-apple-system,sans-serif; background:#f5f4f0; color:var(--text); min-height:100vh; }
+nav { background:var(--green); color:#fff; padding:0 20px; display:flex; align-items:center; justify-content:space-between; height:54px; position:sticky; top:0; z-index:50; }
+.nav-brand { display:flex; align-items:center; gap:8px; font-size:17px; font-weight:700; text-decoration:none; color:#fff; }
+.nav-tabs { display:flex; gap:2px; }
+.nav-tab { background:none; border:none; color:rgba(255,255,255,0.72); padding:7px 14px; border-radius:6px; cursor:pointer; font-size:13px; font-weight:600; transition:all .15s; }
+.nav-tab.active,.nav-tab:hover { background:rgba(255,255,255,0.15); color:#fff; }
+.logout-btn { background:rgba(255,255,255,0.15); border:none; color:#fff; padding:7px 14px; border-radius:6px; cursor:pointer; font-size:13px; font-weight:600; }
+.page { display:none; padding:28px 16px; max-width:1000px; margin:0 auto; }
+.page.active { display:block; }
+.card { background:#fff; border:0.5px solid var(--border); border-radius:var(--radius); padding:24px; margin-bottom:18px; }
+.card-title { font-size:19px; font-weight:700; margin-bottom:4px; }
+.card-sub { color:var(--text-muted); font-size:13px; margin-bottom:18px; }
+label { display:block; font-size:12px; font-weight:600; color:var(--text-muted); margin:10px 0 4px; }
+input, select, textarea { width:100%; padding:9px 11px; border:1px solid var(--border); border-radius:7px; font-size:14px; font-family:inherit; background:#fff; }
+textarea { resize:vertical; min-height:60px; }
+.btn { display:inline-block; background:var(--green); color:#fff; border:none; padding:9px 16px; border-radius:7px; font-size:13px; font-weight:600; cursor:pointer; margin-top:12px; }
+.btn:hover { background:var(--green-mid); }
+.btn.danger { background:var(--red); }
+.btn.secondary { background:var(--gray-mid); color:var(--text); }
+.btn:disabled { opacity:0.5; cursor:not-allowed; }
+.row { display:flex; gap:10px; flex-wrap:wrap; }
+.row > * { flex:1; min-width:140px; }
+.msg { padding:10px 12px; border-radius:7px; font-size:13px; margin-top:10px; display:none; }
+.msg.show { display:block; }
+.msg.error { background:var(--red-light); color:var(--red); }
+.msg.ok { background:var(--green-light); color:var(--green); }
+.pending-item { border:1px solid var(--border); border-radius:9px; padding:16px; margin-bottom:12px; background:#fafaf7; }
+.pending-item h4 { font-size:15px; margin-bottom:2px; }
+.pending-meta { font-size:12px; color:var(--text-muted); margin-bottom:8px; }
+.pending-desc { font-size:13.5px; margin-bottom:10px; line-height:1.5; }
+.badge { display:inline-block; font-size:11px; font-weight:700; padding:2px 8px; border-radius:20px; text-transform:uppercase; letter-spacing:0.3px; }
+.badge.pending { background:var(--amber-light); color:var(--amber); }
+.badge.approved { background:var(--green-light); color:var(--green); }
+.badge.rejected { background:var(--red-light); color:var(--red); }
+.approve-form { display:none; border-top:1px dashed var(--border); margin-top:10px; padding-top:10px; }
+.approve-form.show { display:block; }
+.company-item, .idea-item { display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); padding:10px 0; font-size:13.5px; }
+.company-item:last-child, .idea-item:last-child { border-bottom:none; }
+.empty { color:var(--text-muted); font-size:13.5px; padding:20px 0; text-align:center; }
+.spinner { text-align:center; padding:30px; color:var(--text-muted); font-size:13px; }
+#loginPage { max-width:380px; margin:80px auto; }
+</style>
+</head>
+<body>
+
+<nav id="navBar" style="display:none;">
+  <a class="nav-brand">🌾 KisanMitra Admin</a>
+  <div class="nav-tabs">
+    <button class="nav-tab active" data-page="pending">Pending Stories</button>
+    <button class="nav-tab" data-page="companies">Companies</button>
+    <button class="nav-tab" data-page="ideas">Ideas</button>
+  </div>
+  <button class="logout-btn" onclick="logout()">Log out</button>
+</nav>
+
+<div id="loginPage" class="page active">
+  <div class="card">
+    <div class="card-title">Admin Login</div>
+    <div class="card-sub">Sign in with an account that has the <code>admin</code> role.</div>
+    <label>Phone</label>
+    <input id="loginPhone" type="text" placeholder="admin" autocomplete="username">
+    <label>Password</label>
+    <input id="loginPassword" type="password" placeholder="••••••••" autocomplete="current-password">
+    <button class="btn" style="width:100%" onclick="doLogin()">Log in</button>
+    <div id="loginMsg" class="msg error"></div>
+  </div>
+</div>
+
+<div id="pendingPage" class="page">
+  <div class="card">
+    <div class="card-title">Pending AgriInnovate Submissions</div>
+    <div class="card-sub">Stories submitted by users through the "Submit Your Story" form. Approving one publishes it to the public AgriInnovate page.</div>
+    <div id="pendingList"><div class="spinner">Loading…</div></div>
+  </div>
+</div>
+
+<div id="companiesPage" class="page">
+  <div class="card">
+    <div class="card-title">Add a Company Directly</div>
+    <div class="card-sub">Use this to curate a company without going through the submission/approval flow.</div>
+    <div class="row">
+      <div><label>Name *</label><input id="coName"></div>
+      <div><label>Emoji</label><input id="coEmoji" value="🌾"></div>
+    </div>
+    <div class="row">
+      <div><label>Sector</label><input id="coSector"></div>
+      <div><label>Category</label><input id="coCategory" placeholder="e.g. platform, drones, fintech"></div>
+    </div>
+    <div class="row">
+      <div><label>Founded (year)</label><input id="coFounded"></div>
+      <div><label>Location</label><input id="coLocation"></div>
+    </div>
+    <label>Short description</label>
+    <textarea id="coShortDesc"></textarea>
+    <button class="btn" onclick="addCompany()">Add Company</button>
+    <div id="coMsg" class="msg"></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Published Companies</div>
+    <div id="companiesList"><div class="spinner">Loading…</div></div>
+  </div>
+</div>
+
+<div id="ideasPage" class="page">
+  <div class="card">
+    <div class="card-title">Add a Startup Idea</div>
+    <div class="card-sub">Shown in the "Startup Ideas" tab on the AgriInnovate page as inspiration for new founders.</div>
+    <div class="row">
+      <div><label>Title *</label><input id="ideaTitle"></div>
+      <div><label>Icon (emoji)</label><input id="ideaIcon" value="💡"></div>
+    </div>
+    <label>Description</label>
+    <textarea id="ideaDesc"></textarea>
+    <div class="row">
+      <div><label>Estimated effort / capital</label><input id="ideaEffort" placeholder="e.g. ₹3-5L"></div>
+      <div><label>Potential earning</label><input id="ideaEarn" placeholder="e.g. ₹15L/year"></div>
+      <div><label>Time to launch</label><input id="ideaTime" placeholder="e.g. 2 months"></div>
+    </div>
+    <button class="btn" onclick="addIdea()">Add Idea</button>
+    <div id="ideaMsg" class="msg"></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Existing Ideas</div>
+    <div id="ideasList"><div class="spinner">Loading…</div></div>
+  </div>
+</div>
+
+<script>
+const TOKEN_KEY = 'km_admin_token';
+let TOKEN = localStorage.getItem(TOKEN_KEY) || '';
+
+function api(path, opts={}) {
+  opts.headers = Object.assign({'Content-Type':'application/json'}, opts.headers||{});
+  if (TOKEN) opts.headers['Authorization'] = 'Bearer ' + TOKEN;
+  return fetch(path, opts).then(async r => {
+    const data = await r.json().catch(()=>({}));
+    if (!r.ok) throw new Error(data.error || ('Request failed ('+r.status+')'));
+    return data;
+  });
+}
+
+function showMsg(el, text, ok=false) {
+  el.textContent = text;
+  el.className = 'msg show ' + (ok?'ok':'error');
+}
+
+async function doLogin() {
+  const phone = document.getElementById('loginPhone').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const msgEl = document.getElementById('loginMsg');
+  if (!phone || !password) { showMsg(msgEl, 'Enter phone and password'); return; }
+  try {
+    const data = await api('/api/auth/login', { method:'POST', body: JSON.stringify({phone, password}) });
+    if (!data.user || data.user.role !== 'admin') {
+      showMsg(msgEl, 'This account does not have admin access.');
+      return;
+    }
+    TOKEN = data.token;
+    localStorage.setItem(TOKEN_KEY, TOKEN);
+    enterDashboard();
+  } catch(e) {
+    showMsg(msgEl, e.message);
+  }
+}
+
+function logout() {
+  localStorage.removeItem(TOKEN_KEY);
+  TOKEN = '';
+  document.getElementById('navBar').style.display = 'none';
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.getElementById('loginPage').classList.add('active');
+}
+
+function enterDashboard() {
+  document.getElementById('navBar').style.display = 'flex';
+  document.getElementById('loginPage').classList.remove('active');
+  switchPage('pending');
+  loadPending();
+  loadCompanies();
+  loadIdeas();
+}
+
+function switchPage(name) {
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.toggle('active', t.dataset.page===name));
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById(name+'Page').classList.add('active');
+}
+document.querySelectorAll('.nav-tab').forEach(t => t.addEventListener('click', ()=>switchPage(t.dataset.page)));
+
+function esc(s) { return (s==null?'':String(s)).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+async function loadPending() {
+  const el = document.getElementById('pendingList');
+  try {
+    const data = await api('/api/innovate/stories');
+    const stories = data.stories || [];
+    if (!stories.length) { el.innerHTML = '<div class="empty">No submissions yet.</div>'; return; }
+    el.innerHTML = stories.map(s => `
+      <div class="pending-item" id="story-${s._id}">
+        <h4>${esc(s.name)} <span class="badge ${s.status}">${esc(s.status)}</span></h4>
+        <div class="pending-meta">${esc(s.sector||'')} · ${esc(s.location||'')} · Founded ${esc(s.founded||'—')} · Submitted by ${esc(s.submittedBy||'Anonymous')}</div>
+        <div class="pending-desc">${esc(s.shortDesc||'')}</div>
+        ${s.status==='pending' ? `
+          <button class="btn" onclick="toggleApproveForm('${s._id}')">Review</button>
+          <button class="btn danger" onclick="rejectStory('${s._id}')">Reject</button>
+          <div class="approve-form" id="approveForm-${s._id}">
+            <label>Emoji</label><input id="emoji-${s._id}" value="🌾">
+            <label>Category</label><input id="category-${s._id}" placeholder="e.g. platform, drones, fintech">
+            <button class="btn" onclick="approveStory('${s._id}')">Confirm Approve &amp; Publish</button>
+          </div>
+        ` : s.status==='rejected' ? `<div class="pending-meta">Reason: ${esc(s.reason||'—')}</div>` : ''}
+        <div class="msg" id="storyMsg-${s._id}"></div>
+      </div>
+    `).join('');
+  } catch(e) {
+    el.innerHTML = `<div class="empty">Could not load: ${esc(e.message)}</div>`;
+  }
+}
+
+function toggleApproveForm(id) {
+  document.getElementById('approveForm-'+id).classList.toggle('show');
+}
+
+async function approveStory(id) {
+  const msgEl = document.getElementById('storyMsg-'+id);
+  try {
+    const emoji = document.getElementById('emoji-'+id).value || '🌾';
+    const category = document.getElementById('category-'+id).value || 'platform';
+    await api('/api/innovate/stories/'+id, { method:'PATCH', body: JSON.stringify({action:'approve', emoji, category}) });
+    showMsg(msgEl, 'Approved and published.', true);
+    loadPending(); loadCompanies();
+  } catch(e) { showMsg(msgEl, e.message); }
+}
+
+async function rejectStory(id) {
+  const reason = prompt('Reason for rejection (shown internally only):') || '';
+  const msgEl = document.getElementById('storyMsg-'+id);
+  try {
+    await api('/api/innovate/stories/'+id, { method:'PATCH', body: JSON.stringify({action:'reject', reason}) });
+    loadPending();
+  } catch(e) { showMsg(msgEl, e.message); }
+}
+
+async function loadCompanies() {
+  const el = document.getElementById('companiesList');
+  try {
+    const data = await api('/api/innovate/companies');
+    const cos = data.companies || [];
+    if (!cos.length) { el.innerHTML = '<div class="empty">No published companies yet.</div>'; return; }
+    el.innerHTML = cos.map(c => `
+      <div class="company-item">
+        <span>${esc(c.emoji||'🌾')} <strong>${esc(c.name)}</strong> — ${esc(c.sector||'')}</span>
+        <button class="btn danger" style="margin:0" onclick="deleteCompany('${c._id}')">Remove</button>
+      </div>
+    `).join('');
+  } catch(e) {
+    el.innerHTML = `<div class="empty">Could not load: ${esc(e.message)}</div>`;
+  }
+}
+
+async function addCompany() {
+  const msgEl = document.getElementById('coMsg');
+  const name = document.getElementById('coName').value.trim();
+  if (!name) { showMsg(msgEl, 'Company name is required'); return; }
+  try {
+    await api('/api/admin/innovate/companies', { method:'POST', body: JSON.stringify({
+      name, emoji: document.getElementById('coEmoji').value || '🌾',
+      sector: document.getElementById('coSector').value,
+      category: document.getElementById('coCategory').value,
+      founded: document.getElementById('coFounded').value,
+      location: document.getElementById('coLocation').value,
+      shortDesc: document.getElementById('coShortDesc').value,
+    })});
+    showMsg(msgEl, 'Company added.', true);
+    ['coName','coSector','coCategory','coFounded','coLocation','coShortDesc'].forEach(id=>document.getElementById(id).value='');
+    loadCompanies();
+  } catch(e) { showMsg(msgEl, e.message); }
+}
+
+async function deleteCompany(id) {
+  if (!confirm('Remove this company from the public AgriInnovate page?')) return;
+  try { await api('/api/admin/innovate/companies/'+id, {method:'DELETE'}); loadCompanies(); }
+  catch(e) { alert(e.message); }
+}
+
+async function loadIdeas() {
+  const el = document.getElementById('ideasList');
+  try {
+    const data = await api('/api/innovate/companies');
+    const ideas = data.ideas || [];
+    if (!ideas.length) { el.innerHTML = '<div class="empty">No ideas added yet.</div>'; return; }
+    el.innerHTML = ideas.map(i => `
+      <div class="idea-item"><span>${esc(i.icon||'💡')} <strong>${esc(i.title)}</strong> — ${esc(i.desc||'')}</span></div>
+    `).join('');
+  } catch(e) {
+    el.innerHTML = `<div class="empty">Could not load: ${esc(e.message)}</div>`;
+  }
+}
+
+async function addIdea() {
+  const msgEl = document.getElementById('ideaMsg');
+  const title = document.getElementById('ideaTitle').value.trim();
+  if (!title) { showMsg(msgEl, 'Idea title is required'); return; }
+  try {
+    await api('/api/admin/innovate/ideas', { method:'POST', body: JSON.stringify({
+      title, icon: document.getElementById('ideaIcon').value || '💡',
+      desc: document.getElementById('ideaDesc').value,
+      effort: document.getElementById('ideaEffort').value,
+      earn: document.getElementById('ideaEarn').value,
+      time: document.getElementById('ideaTime').value,
+    })});
+    showMsg(msgEl, 'Idea added.', true);
+    ['ideaTitle','ideaDesc','ideaEffort','ideaEarn','ideaTime'].forEach(id=>document.getElementById(id).value='');
+    loadIdeas();
+  } catch(e) { showMsg(msgEl, e.message); }
+}
+
+// If we already have a saved token, verify it's still valid before showing the dashboard
+if (TOKEN) {
+  api('/api/innovate/stories').then(()=>enterDashboard()).catch(()=>{ TOKEN=''; localStorage.removeItem(TOKEN_KEY); });
+}
+</script>
+</body>
+</html>
