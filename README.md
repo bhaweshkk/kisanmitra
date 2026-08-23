@@ -27,35 +27,3 @@ Language Inclusivity: 11 regional languages ensure no farmer is excluded due to 
 Direct Commerce: KisanBazaar enables direct sales to consumers, removing supply chain intermediaries
 Digital Empowerment: Community groups and AgriInnovate inspire farmers toward entrepreneurship
 
-
-kisanmitra/
-├── server.js                    ← main HTTP server + router (all API routes wired here)
-├── db.js                        ← Postgres-backed generic collection() store (used by everything)
-├── seed-innovate.js             ← run once to seed sample AgriInnovate companies/ideas
-├── process-manager.js           ← process supervisor/restart logic
-├── package.json / package-lock.json
-├── apis.config.json             ← enable/disable AI providers (Groq, Gemini, etc.)
-├── render.yaml                  ← Render.com deploy config
-├── deploy.sh / start-server.sh / start-server.bat
-├── env.example                  ← copy to .env and fill in (DATABASE_URL, AUTH_SECRET, etc.)
-├── README.md
-│
-├── lib/                         ← backend modules, required by server.js
-│   ├── auth.js                  ← register/login/token verify (admin auto-seeded: phone=admin)
-│   ├── adminRoutes.js           ← admin: contacts, chatlogs, logs, db-stats, users
-│   ├── apiRegistry.js           ← plugin/API registry system
-│   ├── docRoutes.js             ← document upload/verification workflow
-│   ├── env.js                   ← loads .env
-│   ├── logger.js
-│   ├── marketplaceRoutes.js     ← alt marketplace implementation (Razorpay payments)
-│   ├── rateLimiter.js
-│   ├── routes.js                ← chat, weather, mandi prices, news, contact
-│   ├── staticServer.js          ← serves public/ (correctly serves .js as ES modules)
-│   ├── validator.js             ← startup env checks
-│   ├── db.js                    ⚠️ dead file — not required anywhere, root db.js is the real one
-│   └── innovateRoutes.js        ⚠️ dead file — logic actually lives inline in server.js
-│
-└── public/                      ← static frontend, no bundler, served as-is
-    ├── index.html                ← the whole app (nav, marketplace, groups, AgriInnovate UI, ~4900 lines)
-    ├── kisanmitra-registration.html
-    └── firebase-init.js          ← added: Firebase Analytics init (CDN ES module)
