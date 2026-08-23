@@ -80,21 +80,21 @@ function parseBody(req, max = 2097152) {
   });
 }
 
-function getUser(req) {
+async function getUser(req) {
   try {
     const h = req.headers['authorization'] || '';
     if (!h.startsWith('Bearer ')) return null;
     const token = h.slice(7).trim();
     if (!token) return null;
-    return usersCol.find({}).find(u => u.token === token) || null;
+    return await auth.verifyToken(token);
   } catch { return null; }
 }
-function requireAuth(req, res)  { const u=getUser(req); if(!u){sendJSON(res,401,{error:'Login required. Please sign in.'});return null;} return u; }
-function requireAdmin(req, res) { const u=getUser(req); if(!u||u.role!=='admin'){sendJSON(res,403,{error:'Admin access required.'});return null;} return u; }
+async function requireAuth(req, res)  { const u=await getUser(req); if(!u){sendJSON(res,401,{error:'Login required. Please sign in.'});return null;} return u; }
+async function requireAdmin(req, res) { const u=await getUser(req); if(!u||u.role!=='admin'){sendJSON(res,403,{error:'Admin access required.'});return null;} return u; }
 
-function handleGetGroups(req, res) {
+async function handleGetGroups(req, res) {
   try {
-    let groups = groupsCol.find({}).filter(g => !g.status || g.status === 'approved');
+    let groups = (await groupsCol.find({})).filter(g => !g.status || g.status === 'approved');
     groups.sort((a,b) => (b.createdAt||0)-(a.createdAt||0));
     sendJSON(res, 200, { groups });
   } catch(e) { logger.error('getGroups',{msg:e.message}); sendJSON(res, 500, {error:'Could not load groups'}); }
@@ -103,8 +103,8 @@ function handleGetGroups(req, res) {
 async function handleCreateGroup(req, res, body) {
   try {
     if (!body || !body.name || !body.name.trim()) return sendJSON(res, 400, {error:'Group name is required'});
-    const u = getUser(req);
-    const g = groupsCol.insert({
+    const u = await getUser(req);
+    const g = await groupsCol.insert({
       name: body.name.trim(), emoji: body.emoji||'👥',
       desc: (body.desc||'').trim(), category: body.category||'general',
       createdBy: u?(u._id||u.id):(body.createdBy||'anon'),
@@ -115,9 +115,9 @@ async function handleCreateGroup(req, res, body) {
   } catch(e) { logger.error('createGroup',{msg:e.message}); sendJSON(res, 500, {error:'Could not create group'}); }
 }
 
-function handleGetMessages(req, res, gid) {
+async function handleGetMessages(req, res, gid) {
   try {
-    const msgs = msgsCol.find({ groupId: gid });
+    const msgs = await msgsCol.find({ groupId: gid });
     msgs.sort((a,b) => (a.createdAt||0)-(b.createdAt||0));
     sendJSON(res, 200, { messages: msgs.slice(-100) });
   } catch(e) { sendJSON(res, 500, {error:'Could not load messages'}); }
@@ -126,8 +126,8 @@ function handleGetMessages(req, res, gid) {
 async function handlePostMessage(req, res, gid, body) {
   try {
     if (!body||!body.content||!body.content.trim()) return sendJSON(res, 400, {error:'Message content required'});
-    const u = getUser(req);
-    const m = msgsCol.insert({
+    const u = await getUser(req);
+    const m = await msgsCol.insert({
       groupId: gid, content: body.content.trim(),
       userId:     u?(u._id||u.id):(body.userId||'anon'),
       userName:   u?u.name:(body.userName||'User'),
@@ -140,13 +140,13 @@ async function handlePostMessage(req, res, gid, body) {
   } catch(e) { sendJSON(res, 500, {error:'Could not post message'}); }
 }
 
-function handleListProducts(req, res) {
+async function handleListProducts(req, res) {
   try {
     const url   = new URL('http://x'+req.url);
     const limit = parseInt(url.searchParams.get('limit'))||60;
     const cat   = url.searchParams.get('category')||'';
     const q     = (url.searchParams.get('q')||'').toLowerCase();
-    let all = productsCol.find({}).filter(p => p.status !== 'rejected');
+    let all = (await productsCol.find({})).filter(p => p.status !== 'rejected');
     if (cat) all = all.filter(p => p.category===cat);
     if (q)   all = all.filter(p => (p.name||'').toLowerCase().includes(q)||(p.sellerName||'').toLowerCase().includes(q)||(p.tags||[]).some(t=>t.toLowerCase().includes(q)));
     all.sort((a,b) => (b.createdAt||0)-(a.createdAt||0));
@@ -156,13 +156,13 @@ function handleListProducts(req, res) {
 
 async function handleCreateProduct(req, res, body) {
   try {
-    const u = requireAuth(req,res); if(!u) return;
+    const u = await requireAuth(req,res); if(!u) return;
     if (!body)                              return sendJSON(res, 400, {error:'Request body required'});
     if (!body.name||!body.name.trim())      return sendJSON(res, 400, {error:'Product name required'});
     if (!body.price||+body.price<=0)        return sendJSON(res, 400, {error:'Valid price required'});
     if (!body.stock||+body.stock<=0)        return sendJSON(res, 400, {error:'Stock quantity required'});
     if (!body.unit)                         return sendJSON(res, 400, {error:'Unit required (kg, litre, etc.)'});
-    const p = productsCol.insert({
+    const p = await productsCol.insert({
       name: body.name.trim(), category: body.category||'grains',
       desc: (body.desc||'').trim(), emoji: body.emoji||'🌾',
       price: parseFloat(body.price),
@@ -182,10 +182,10 @@ async function handleCreateProduct(req, res, body) {
   } catch(e) { logger.error('createProduct',{msg:e.message}); sendJSON(res, 500, {error:'Could not create listing'}); }
 }
 
-function handleMyOrders(req, res) {
+async function handleMyOrders(req, res) {
   try {
-    const u = requireAuth(req,res); if(!u) return;
-    const mine = ordersCol.find({ buyerId: u._id||u.id });
+    const u = await requireAuth(req,res); if(!u) return;
+    const mine = await ordersCol.find({ buyerId: u._id||u.id });
     mine.sort((a,b) => (b.createdAt||0)-(a.createdAt||0));
     sendJSON(res, 200, { orders: mine });
   } catch(e) { sendJSON(res, 500, {error:'Could not load orders'}); }
@@ -193,19 +193,19 @@ function handleMyOrders(req, res) {
 
 async function handleCreateOrder(req, res, body) {
   try {
-    const u = requireAuth(req,res); if(!u) return;
+    const u = await requireAuth(req,res); if(!u) return;
     if (!body||!body.items||!body.items.length) return sendJSON(res, 400, {error:'Order items required'});
     for (const item of body.items) {
-      const p = productsCol.findOne({_id: item._id});
+      const p = await productsCol.findOne({_id: item._id});
       if (!p)          return sendJSON(res, 404, {error:`Product not found: ${item._id}`});
       if (p.stock<item.qty) return sendJSON(res, 400, {error:`Not enough stock for ${p.name} (available: ${p.stock})`});
     }
     for (const item of body.items) {
-      const p = productsCol.findOne({_id: item._id});
-      if (p) productsCol.updateById(item._id, {stock: p.stock-item.qty});
+      const p = await productsCol.findOne({_id: item._id});
+      if (p) await productsCol.updateById(item._id, {stock: p.stock-item.qty});
     }
     const total = parseFloat(body.total)||body.items.reduce((a,c)=>a+c.price*c.qty,0);
-    const order = ordersCol.insert({
+    const order = await ordersCol.insert({
       buyerId: u._id||u.id, buyerName: u.name||'',
       items: body.items, total, status:'processing', currency:'INR',
       productName: body.items.length===1?body.items[0].name:body.items.length+' items',
@@ -217,14 +217,14 @@ async function handleCreateOrder(req, res, body) {
   } catch(e) { logger.error('createOrder',{msg:e.message}); sendJSON(res, 500, {error:'Could not place order'}); }
 }
 
-function handleListCompanies(req, res) {
+async function handleListCompanies(req, res) {
   try {
-    const cos   = companiesCol.find({status:'published'});
+    const cos   = await companiesCol.find({status:'published'});
     cos.sort((a,b) => (b.createdAt||0)-(a.createdAt||0));
-    const ideas = ideasCol.find({});
+    const ideas = await ideasCol.find({});
     ideas.sort((a,b) => (a.order||99)-(b.order||99));
     sendJSON(res, 200, { companies: cos, ideas });
-  } catch(e) { sendJSON(res, 500, {error:'Could not load companies'}); }
+  } catch(e) { logger.error('listCompanies',{msg:e.message}); sendJSON(res, 500, {error:'Could not load companies'}); }
 }
 
 async function handleSubmitStory(req, res, body) {
@@ -232,34 +232,35 @@ async function handleSubmitStory(req, res, body) {
     if (!body) return sendJSON(res, 400, {error:'Request body required'});
     if (!body.name||!body.sector||!body.founded||!body.location||!body.shortDesc)
       return sendJSON(res, 400, {error:'name, sector, founded, location and shortDesc are required'});
-    const u = getUser(req);
-    const s = storiesCol.insert({
+    const u = await getUser(req);
+    const s = await storiesCol.insert({
       ...body,
       submittedBy:   u?u.name:(body.submittedBy||'Anonymous'),
       submittedById: u?(u._id||u.id):null,
-      status: 'pending'
+      status: 'pending',
+      createdAt: Date.now(),
     });
     sendJSON(res, 201, {message:'Story submitted! Our team will review within 3 business days.', id: s._id});
-  } catch(e) { sendJSON(res, 500, {error:'Could not submit story'}); }
+  } catch(e) { logger.error('submitStory',{msg:e.message}); sendJSON(res, 500, {error:'Could not submit story'}); }
 }
 
-function handleAdminListStories(req, res) {
+async function handleAdminListStories(req, res) {
   try {
-    const u = requireAdmin(req,res); if(!u) return;
-    const all = storiesCol.find({});
+    const u = await requireAdmin(req,res); if(!u) return;
+    const all = await storiesCol.find({});
     all.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
     sendJSON(res, 200, {stories: all});
-  } catch(e) { sendJSON(res, 500, {error:'Could not load stories'}); }
+  } catch(e) { logger.error('adminListStories',{msg:e.message}); sendJSON(res, 500, {error:'Could not load stories'}); }
 }
 
 async function handleAdminApproveStory(req, res, storyId, body) {
   try {
-    const u = requireAdmin(req,res); if(!u) return;
-    const s = storiesCol.findOne({_id: storyId});
+    const u = await requireAdmin(req,res); if(!u) return;
+    const s = await storiesCol.findOne({_id: storyId});
     if (!s) return sendJSON(res, 404, {error:'Story not found'});
     if (!body||!['approve','reject'].includes(body.action)) return sendJSON(res, 400, {error:'action must be approve or reject'});
     if (body.action === 'approve') {
-      const company = companiesCol.insert({
+      const company = await companiesCol.insert({
         name: s.name, tagline: (s.shortDesc||'').slice(0,80), shortDesc: s.shortDesc||'',
         sector: s.sector||'', category: body.category||'platform',
         founded: s.founded||'', location: s.location||'',
@@ -273,22 +274,23 @@ async function handleAdminApproveStory(req, res, storyId, body) {
         story: body.enrichedStory||[], certifications: body.certifications||[],
         tags: body.tags||[], authenticityScore: body.authenticityScore||85,
         auditor: body.auditor||'KisanMitra Team',
-        verified: true, status: 'published', originalStoryId: storyId
+        verified: true, status: 'published', originalStoryId: storyId,
+        createdAt: Date.now(),
       });
-      storiesCol.updateById(storyId, {status:'approved', approvedAt: Date.now()});
+      await storiesCol.updateById(storyId, {status:'approved', approvedAt: Date.now()});
       sendJSON(res, 200, {message:'Approved and published', company});
     } else {
-      storiesCol.updateById(storyId, {status:'rejected', rejectedAt: Date.now(), reason: body.reason||''});
+      await storiesCol.updateById(storyId, {status:'rejected', rejectedAt: Date.now(), reason: body.reason||''});
       sendJSON(res, 200, {message:'Story rejected'});
     }
-  } catch(e) { sendJSON(res, 500, {error:'Could not update story'}); }
+  } catch(e) { logger.error('adminApproveStory',{msg:e.message}); sendJSON(res, 500, {error:'Could not update story'}); }
 }
 
 async function handleAdminAddCompany(req, res, body) {
   try {
-    const user = requireAdmin(req, res); if (!user) return;
+    const user = await requireAdmin(req, res); if (!user) return;
     if (!body || !body.name) return sendJSON(res, 400, { error: 'Company name required' });
-    const company = companiesCol.insert({
+    const company = await companiesCol.insert({
       name:              (body.name||'').trim(),
       tagline:           (body.tagline||'').trim(),
       shortDesc:         (body.shortDesc||'').trim(),
@@ -316,22 +318,24 @@ async function handleAdminAddCompany(req, res, body) {
       auditor:           body.auditor  || 'KisanMitra Team',
       verified:          body.verified !== false,
       status:            'published',
+      createdAt:         Date.now(),
     });
     sendJSON(res, 201, company);
   } catch(e) {
-    console.error('[innovate] handleAdminAddCompany:', e.message);
+    logger.error('adminAddCompany',{msg:e.message});
     sendJSON(res, 500, { error: 'Could not add company' });
   }
 }
 
 async function handleAdminAddIdea(req, res, body) {
   try {
-    const user = requireAdmin(req, res); if (!user) return;
+    const user = await requireAdmin(req, res); if (!user) return;
     if (!body || !body.title) return sendJSON(res, 400, { error: 'Idea title required' });
-    const idea = ideasCol.insert({
+    const existingCount = (await ideasCol.find({})).length;
+    const idea = await ideasCol.insert({
       icon:   body.icon   || '💡',
       color:  body.color  || '#059669',
-      order:  parseInt(body.order) || (ideasCol.find({}).length + 1),
+      order:  parseInt(body.order) || (existingCount + 1),
       title:  (body.title||'').trim(),
       desc:   (body.desc||'').trim(),
       effort: body.effort || '',
@@ -340,18 +344,20 @@ async function handleAdminAddIdea(req, res, body) {
     });
     sendJSON(res, 201, idea);
   } catch(e) {
+    logger.error('adminAddIdea',{msg:e.message});
     sendJSON(res, 500, { error: 'Could not add idea' });
   }
 }
 
 async function handleAdminDeleteCompany(req, res, companyId) {
   try {
-    const user = requireAdmin(req, res); if (!user) return;
-    const co = companiesCol.findOne({ _id: companyId });
+    const user = await requireAdmin(req, res); if (!user) return;
+    const co = await companiesCol.findOne({ _id: companyId });
     if (!co) return sendJSON(res, 404, { error: 'Company not found' });
-    companiesCol.updateById(companyId, { status: 'deleted' });
+    await companiesCol.updateById(companyId, { status: 'deleted' });
     sendJSON(res, 200, { message: 'Company removed from AgriInnovate' });
   } catch(e) {
+    logger.error('adminDeleteCompany',{msg:e.message});
     sendJSON(res, 500, { error: 'Could not delete company' });
   }
 }
@@ -404,22 +410,25 @@ async function router(req, res, isHttps) {
   if (pathname==='/api/contact'&&method==='POST')  { await routes.handleContact(req,res); return; }
 
   // Community Groups (permanent server storage)
-  if (pathname==='/api/groups'&&method==='GET')  { handleGetGroups(req,res); return; }
+  if (pathname==='/api/groups'&&method==='GET')  { await handleGetGroups(req,res); return; }
   if (pathname==='/api/groups'&&method==='POST') { const b=await parseBody(req).catch(()=>null); await handleCreateGroup(req,res,b); return; }
-  if (pathname.match(/^\/api\/groups\/[^/]+\/messages$/)&&method==='GET')  { handleGetMessages(req,res,pathname.split('/')[3]); return; }
+  if (pathname.match(/^\/api\/groups\/[^/]+\/messages$/)&&method==='GET')  { await handleGetMessages(req,res,pathname.split('/')[3]); return; }
   if (pathname.match(/^\/api\/groups\/[^/]+\/messages$/)&&method==='POST') { const b=await parseBody(req).catch(()=>null); await handlePostMessage(req,res,pathname.split('/')[3],b); return; }
 
   // Marketplace (permanent server storage)
-  if (pathname==='/api/marketplace/products'   &&method==='GET')  { handleListProducts(req,res); return; }
+  if (pathname==='/api/marketplace/products'   &&method==='GET')  { await handleListProducts(req,res); return; }
   if (pathname==='/api/marketplace/products'   &&method==='POST') { const b=await parseBody(req).catch(()=>null); await handleCreateProduct(req,res,b); return; }
-  if (pathname==='/api/marketplace/orders/mine'&&method==='GET')  { handleMyOrders(req,res); return; }
+  if (pathname==='/api/marketplace/orders/mine'&&method==='GET')  { await handleMyOrders(req,res); return; }
   if (pathname==='/api/marketplace/orders'     &&method==='POST') { const b=await parseBody(req).catch(()=>null); await handleCreateOrder(req,res,b); return; }
 
   // AgriInnovate (permanent server storage)
-  if (pathname==='/api/innovate/companies'&&method==='GET')  { handleListCompanies(req,res); return; }
+  if (pathname==='/api/innovate/companies'&&method==='GET')  { await handleListCompanies(req,res); return; }
   if (pathname==='/api/innovate/stories'  &&method==='POST') { const b=await parseBody(req).catch(()=>null); await handleSubmitStory(req,res,b); return; }
-  if (pathname==='/api/innovate/stories'  &&method==='GET')  { handleAdminListStories(req,res); return; }
+  if (pathname==='/api/innovate/stories'  &&method==='GET')  { await handleAdminListStories(req,res); return; }
   if (pathname.match(/^\/api\/innovate\/stories\/[^/]+$/)&&method==='PATCH') { const b=await parseBody(req).catch(()=>null); await handleAdminApproveStory(req,res,pathname.split('/').pop(),b); return; }
+  if (pathname==='/api/admin/innovate/companies'&&method==='POST')   { const b=await parseBody(req).catch(()=>null); await handleAdminAddCompany(req,res,b); return; }
+  if (pathname==='/api/admin/innovate/ideas'    &&method==='POST')   { const b=await parseBody(req).catch(()=>null); await handleAdminAddIdea(req,res,b); return; }
+  if (pathname.match(/^\/api\/admin\/innovate\/companies\/[^/]+$/)&&method==='DELETE') { await handleAdminDeleteCompany(req,res,pathname.split('/').pop()); return; }
 
   // Plugins
   if (pathname==='/api/plugins'&&method==='GET') { apiRegistry.handleListPlugins(req,res); return; }
