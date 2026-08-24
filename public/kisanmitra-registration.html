@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <script type="module" src="/firebase-init.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>KisanMitra — Register & Login</title>
@@ -45,6 +46,9 @@ nav { background:var(--green); color:#fff; padding:0 20px; display:flex; align-i
 .form-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
 .fg { display:flex; flex-direction:column; gap:5px; }
 .fg.full { grid-column:1/-1; }
+.oauth-divider { display:flex; align-items:center; gap:10px; margin:16px 0; color:var(--text-muted); font-size:12px; font-weight:600; }
+.oauth-divider::before, .oauth-divider::after { content:''; flex:1; height:1px; background:var(--border); }
+.g-signin-box { display:flex; justify-content:center; margin-bottom:4px; min-height:44px; }
 label { font-size:12px; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:.04em; }
 input,select { padding:9px 12px; border:1px solid var(--gray-mid); border-radius:8px; font-size:14px; font-family:inherit; color:var(--text); width:100%; transition:border-color .15s; background:#fff; }
 input:focus,select:focus { outline:none; border-color:var(--green); box-shadow:0 0 0 3px rgba(59,109,17,.1); }
@@ -103,7 +107,7 @@ tr:hover td { background:var(--gray-light); }
 <body>
 
 <nav>
-  <a class="nav-brand" href="https://kisanmitra-2.onrender.com/" target="_blank">🌱 KisanMitra</a>
+  <span class="nav-brand">🌱 KisanMitra</span>
   <div class="nav-tabs">
     <button class="nav-tab active" id="tab-home"      onclick="go('home')">🏠 <span class="lbl">Home</span></button>
     <button class="nav-tab"        id="tab-register"  onclick="go('register')">📝 <span class="lbl">Register</span></button>
@@ -122,7 +126,6 @@ tr:hover td { background:var(--gray-light); }
     <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
       <button class="btn btn-green" onclick="go('register')">👨‍🌾 Register Now</button>
       <button class="btn btn-amber" onclick="go('login')">🔑 Login</button>
-      <a href="https://kisanmitra-2.onrender.com/" target="_blank" class="btn btn-outline">🌐 Open App</a>
     </div>
   </div>
   <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;">
@@ -138,6 +141,8 @@ tr:hover td { background:var(--gray-light); }
     <div class="card-title">Create Account</div>
     <div class="card-sub">Register as a farmer or buyer to access all features</div>
     <div id="reg-alert"></div>
+    <div class="g-signin-box" id="g-signin-register"></div>
+    <div class="oauth-divider">OR REGISTER WITH DETAILS</div>
     <div class="role-grid">
       <div class="role-card selected" id="rc-farmer" onclick="pickRole('farmer')">
         <div class="ri">👨‍🌾</div><strong>Farmer</strong>
@@ -213,6 +218,8 @@ tr:hover td { background:var(--gray-light); }
     <div class="card-title">Login</div>
     <div class="card-sub">Welcome back to KisanMitra</div>
     <div id="login-alert"></div>
+    <div class="g-signin-box" id="g-signin-login"></div>
+    <div class="oauth-divider">OR LOGIN WITH PASSWORD</div>
     <div style="display:flex;flex-direction:column;gap:13px">
       <div class="fg"><label>Mobile Number or Email</label><input id="l-id" type="text" placeholder="Enter mobile or email"></div>
       <div class="fg"><label>Password</label><input id="l-pass" type="password" placeholder="Your password" onkeydown="if(event.key==='Enter')doLogin()"></div>
@@ -221,6 +228,60 @@ tr:hover td { background:var(--gray-light); }
       <div style="border-top:1px solid var(--border);padding-top:14px;text-align:center">
         <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px">Admin access</p>
         <button class="btn btn-outline btn-sm" onclick="adminLoginPrompt()">🛡️ Admin Login</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- COMPLETE PROFILE (shown after first-time Google sign-in) -->
+<div class="page" id="page-complete-profile">
+  <div class="card">
+    <div class="card-title">One last step</div>
+    <div class="card-sub" id="cp-welcome">Just a few details to finish setting up your KisanMitra account.</div>
+    <div id="cp-alert"></div>
+    <div class="role-grid">
+      <div class="role-card selected" id="cprc-farmer" onclick="cpPickRole('farmer')">
+        <div class="ri">👨‍🌾</div><strong>Farmer</strong>
+        <span>I grow crops and want to sell produce & access resources</span>
+      </div>
+      <div class="role-card" id="cprc-buyer" onclick="cpPickRole('buyer')">
+        <div class="ri">🏪</div><strong>Buyer / Trader</strong>
+        <span>I want to buy produce directly from farmers</span>
+      </div>
+    </div>
+    <div class="form-grid">
+      <div class="fg"><label>Mobile Number *</label><input id="cp-phone" type="tel" placeholder="10-digit number" maxlength="10"></div>
+      <div class="fg">
+        <label>State *</label>
+        <select id="cp-state">
+          <option value="">-- Select State --</option>
+          <option>Rajasthan</option><option>Uttar Pradesh</option><option>Madhya Pradesh</option>
+          <option>Punjab</option><option>Haryana</option><option>Maharashtra</option>
+          <option>Gujarat</option><option>Bihar</option><option>West Bengal</option>
+          <option>Karnataka</option><option>Andhra Pradesh</option><option>Tamil Nadu</option>
+          <option>Telangana</option><option>Odisha</option><option>Other</option>
+        </select>
+      </div>
+      <div class="fg"><label>District *</label><input id="cp-district" type="text" placeholder="Your district"></div>
+      <div class="fg"><label>Village / City</label><input id="cp-village" type="text" placeholder="Village or city name"></div>
+      <div class="fg full" id="cpsec-farmer">
+        <div class="divider"></div>
+        <p style="font-size:14px;font-weight:700;margin-bottom:12px;">🌾 Farm Details</p>
+        <div class="form-grid">
+          <div class="fg"><label>Farm Size (acres)</label><input id="cp-farmsize" type="number" placeholder="e.g. 5"></div>
+          <div class="fg"><label>Primary Crop(s)</label><input id="cp-crops" type="text" placeholder="Wheat, Rice, Tomato..."></div>
+        </div>
+      </div>
+      <div class="fg full" id="cpsec-buyer" style="display:none">
+        <div class="divider"></div>
+        <p style="font-size:14px;font-weight:700;margin-bottom:12px;">🏪 Business Details</p>
+        <div class="form-grid">
+          <div class="fg"><label>Business Name</label><input id="cp-biz" type="text" placeholder="Your business / mandi name"></div>
+          <div class="fg full"><label>Crops Interested In Buying</label><input id="cp-interested" type="text" placeholder="Wheat, Maize, Vegetables..."></div>
+        </div>
+      </div>
+      <div class="fg full">
+        <button class="btn btn-green btn-full" id="cp-btn" onclick="doCompleteProfile()">Finish Setup</button>
       </div>
     </div>
   </div>
@@ -242,8 +303,7 @@ tr:hover td { background:var(--gray-light); }
     <div class="card">
       <p style="font-size:14px;font-weight:700;margin-bottom:14px">Quick Access</p>
       <div style="display:flex;flex-direction:column;gap:10px">
-        <a href="https://kisanmitra-2.onrender.com/" target="_blank" class="btn btn-green">🌱 Open KisanMitra App</a>
-        <p style="font-size:12px;color:var(--text-muted)">Your account is registered. Use the main app to access mandi prices, weather & AI assistant.</p>
+        <p style="font-size:12px;color:var(--text-muted)">Your account is registered. Use the KisanMitra app to access mandi prices, weather & AI assistant.</p>
       </div>
     </div>
   </div>
@@ -287,7 +347,7 @@ tr:hover td { background:var(--gray-light); }
 
 <script>
 
-const SERVER = 'https://kisanmitra-2.onrender.com';
+const SERVER = '';
 
 /* ─── STATE ──────────────────────────────────────────── */
 let currentUser  = null;
@@ -380,6 +440,92 @@ function pickRole(r) {
   document.getElementById('sec-buyer').style.display  = r==='buyer'  ? 'flex' : 'none';
 }
 
+/* ─── GOOGLE SIGN-IN ─────────────────────────────────── */
+// Get this from https://console.cloud.google.com/apis/credentials (OAuth 2.0 Client ID, Web application).
+// This value is public (not a secret) and safe to ship in frontend code.
+const GOOGLE_CLIENT_ID = 'GOOGLE_CLIENT_ID_PLACEHOLDER';
+let cpRole = 'farmer';
+
+function initGoogleSignIn(attempt = 0) {
+  if (!window.google || !google.accounts || !google.accounts.id) {
+    if (attempt > 40) return; // ~8s of retrying, then give up quietly
+    return setTimeout(() => initGoogleSignIn(attempt + 1), 200);
+  }
+  if (GOOGLE_CLIENT_ID === 'GOOGLE_CLIENT_ID_PLACEHOLDER') {
+    console.warn('[KisanMitra] Google Sign-In is not configured — set GOOGLE_CLIENT_ID in this file and in the server .env.');
+    return;
+  }
+  google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: handleGoogleCredential });
+  ['g-signin-register', 'g-signin-login'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) google.accounts.id.renderButton(el, { theme: 'outline', size: 'large', width: 320, text: 'continue_with' });
+  });
+}
+window.addEventListener('load', () => initGoogleSignIn());
+
+async function handleGoogleCredential(response) {
+  const onLoginPage = document.getElementById('page-login').classList.contains('active');
+  const alertId = onLoginPage ? 'login-alert' : 'reg-alert';
+  clearAlert(alertId);
+
+  const r = await api('POST', '/api/auth/google', { credential: response.credential });
+  if (!r.ok || !r.data || !r.data.token) {
+    showAlert(alertId, 'error', (r.data && r.data.error) || 'Google sign-in failed. Please try again.');
+    return;
+  }
+
+  Store.setToken(r.data.token);
+  Store.setUser(r.data.user);
+  currentUser = r.data.user;
+
+  if (r.data.profileComplete === false) {
+    document.getElementById('cp-welcome').textContent =
+      'Welcome, ' + (currentUser.name || 'there') + '! Just a few details to finish setting up your account.';
+    go('complete-profile');
+  } else {
+    afterLogin(true);
+  }
+}
+
+function cpPickRole(r) {
+  cpRole = r;
+  document.getElementById('cprc-farmer').classList.toggle('selected', r==='farmer');
+  document.getElementById('cprc-buyer').classList.toggle('selected',  r==='buyer');
+  document.getElementById('cpsec-farmer').style.display = r==='farmer' ? 'flex' : 'none';
+  document.getElementById('cpsec-buyer').style.display  = r==='buyer'  ? 'flex' : 'none';
+}
+
+async function doCompleteProfile() {
+  clearAlert('cp-alert');
+  const phone    = val('cp-phone');
+  const state    = val('cp-state');
+  const district = val('cp-district');
+  if (!phone || phone.length !== 10) return showAlert('cp-alert','error','Please enter a valid 10-digit mobile number.');
+  if (!state)    return showAlert('cp-alert','error','Please select your state.');
+  if (!district) return showAlert('cp-alert','error','Please enter your district.');
+
+  const body = { phone, role: cpRole, state, district, village: val('cp-village') };
+  if (cpRole === 'farmer') {
+    body.farmSize = val('cp-farmsize');
+    body.crops    = val('cp-crops');
+  } else {
+    body.businessName    = val('cp-biz');
+    body.interestedCrops = val('cp-interested');
+  }
+
+  setBusy('cp-btn', true, 'Saving...');
+  const r = await api('PATCH', '/api/auth/complete-profile', body);
+  setBusy('cp-btn', false, 'Finish Setup');
+
+  if (r.ok && r.data && r.data.user) {
+    Store.setUser(r.data.user);
+    currentUser = r.data.user;
+    afterLogin(true);
+  } else {
+    showAlert('cp-alert','error', (r.data && r.data.error) || 'Could not save your profile. Please try again.');
+  }
+}
+
 
 async function doRegister() {
   clearAlert('reg-alert');
@@ -416,7 +562,7 @@ async function doRegister() {
     Store.setUser(r.data.user);
     currentUser = r.data.user;
     showAlert('reg-alert','success','✅ Account created! Opening KisanMitra...');
-    setTimeout(() => { window.location.href = 'https://kisanmitra-2.onrender.com/'; }, 1200);
+    setTimeout(() => { window.location.href = '/'; }, 1200);
   } else {
     const msg = (r.data && (r.data.error || r.data.message)) || 'Registration failed. Please try again.';
     showAlert('reg-alert','error', msg);
@@ -447,7 +593,7 @@ async function doLogin() {
     Store.setUser(r.data.user);
     currentUser = r.data.user;
     showAlert('login-alert','success','✅ Login successful! Opening KisanMitra...');
-    setTimeout(() => { window.location.href = 'https://kisanmitra-2.onrender.com/'; }, 900);
+    setTimeout(() => { window.location.href = '/'; }, 900);
   } else if (r.status === 401) {
     showAlert('login-alert','error','❌ Incorrect mobile number or password. Please try again.');
   } else if (r.status === 0 || r.status >= 500) {
