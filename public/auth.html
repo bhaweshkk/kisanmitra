@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KisanMitra — Advanced Authentication</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --green: #3B6D11; --green-light: #EAF3DE;
+      --blue: #185FA5; --blue-light: #E6F1FB;
+      --red: #A32D2D; --red-light: #FCEBEB;
+      --gray-light: #F1EFE8; --gray-mid: #D3D1C7;
+      --text: #2C2C2A; --text-muted: #888780;
+      --border: rgba(0,0,0,0.12); --radius: 10px;
+    }
+    body { 
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #f5f4f0, #ecf0f1);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .auth-container {
+      width: 100%;
+      max-width: 520px;
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+      overflow: hidden;
+    }
+    .auth-header {
+      background: linear-gradient(135deg, var(--green), #2d5209);
+      color: white;
+      padding: 32px 28px;
+      text-align: center;
+    }
+    .auth-header h1 {
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .auth-header p {
+      font-size: 14px;
+      opacity: 0.9;
+    }
+    .auth-content { padding: 32px 28px; }
+    .auth-tabs {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 28px;
+      border-bottom: 2px solid var(--border);
+    }
+    .auth-tab {
+      background: none;
+      border: none;
+      padding: 12px 16px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      color: var(--text-muted);
+      border-bottom: 3px solid transparent;
+      transition: all 0.2s;
+      margin-bottom: -2px;
+    }
+    .auth-tab.active {
+      color: var(--green);
+      border-bottom-color: var(--green);
+    }
+    .auth-tab:hover { color: var(--text); }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+    .form-group {
+      margin-bottom: 16px;
+      display: flex;
+      flex-direction: column;
+    }
+    label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    }
+    input, select {
+      padding: 11px 14px;
+      border: 1.5px solid var(--gray-mid);
+      border-radius: 8px;
+      font-size: 14px;
+      font-family: inherit;
+      transition: all 0.2s;
+      background: white;
+    }
+    input:focus, select:focus {
+      outline: none;
+      border-color: var(--green);
+      box-shadow: 0 0 0 3px rgba(59, 109, 17, 0.1);
+    }
+    input::placeholder { color: var(--text-muted); }
+    .divider {
+      text-align: center;
+      margin: 24px 0 20px;
+      font-size: 13px;
+      color: var(--text-muted);
+      position: relative;
+    }
+    .divider::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 50%;
+      width: 100%;
+      height: 1px;
+      background: var(--border);
+      z-index: 0;
+    }
+    .divider span {
+      position: relative;
+      background: white;
+      padding: 0 10px;
+      z-index: 1;
+    }
+    .oauth-buttons {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .oauth-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 12px;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      background: white;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      transition: all 0.2s;
+      font-family: inherit;
+    }
+    .oauth-btn:hover {
+      border-color: var(--green);
+      background: var(--green-light);
+      transform: translateY(-1px);
+    }
+    .oauth-btn.google {
+      border-color: #ddd;
+    }
+    .oauth-btn.google:hover {
+      background: #f8f9fa;
+      border-color: #4285f4;
+    }
+    .btn {
+      width: 100%;
+      padding: 13px;
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: inherit;
+    }
+    .btn-green {
+      background: linear-gradient(135deg, var(--green), #2d5209);
+      color: white;
+    }
+    .btn-green:hover:not(:disabled) {
+      box-shadow: 0 6px 20px rgba(59, 109, 17, 0.3);
+      transform: translateY(-2px);
+    }
+    .btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    .alert {
+      padding: 12px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      line-height: 1.4;
+      animation: slideDown 0.3s ease;
+    }
+    @keyframes slideDown {
+      from { opacity: 0; transform: translateY(-10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .alert-success {
+      background: #dcfce7;
+      color: #166534;
+      border: 1px solid #86efac;
+    }
+    .alert-error {
+      background: var(--red-light);
+      color: var(--red);
+      border: 1px solid #fca5a5;
+    }
+    .alert-info {
+      background: var(--blue-light);
+      color: var(--blue);
+      border: 1px solid #93c5fd;
+    }
+    .spinner {
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .footer-link {
+      text-align: center;
+      margin-top: 20px;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    .footer-link a {
+      color: var(--green);
+      text-decoration: none;
+      font-weight: 600;
+    }
+    .footer-link a:hover { text-decoration: underline; }
+    .role-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .role-card {
+      border: 2px solid var(--border);
+      border-radius: 8px;
+      padding: 14px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .role-card:hover {
+      border-color: var(--green);
+      background: var(--green-light);
+    }
+    .role-card.selected {
+      border-color: var(--green);
+      background: var(--green-light);
+    }
+    .role-card-icon { font-size: 24px; margin-bottom: 6px; }
+    .role-card-title { font-size: 13px; font-weight: 600; color: var(--green); }
+    .email-verify {
+      background: var(--blue-light);
+      padding: 14px;
+      border-radius: 8px;
+      margin-bottom: 16px;
+      border-left: 4px solid var(--blue);
+    }
+    .email-verify-step {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--blue);
+      margin-bottom: 4px;
+    }
+    .email-verify-text {
+      font-size: 13px;
+      color: #185fa5;
+    }
+    @media(max-width:600px) {
+      .auth-container { margin: 10px; }
+      .role-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="auth-container">
+  <div class="auth-header">
+    <h1>🌱 KisanMitra</h1>
+    <p>Connecting farmers & buyers across India</p>
+  </div>
+
+  <div class="auth-content">
+    <div class="auth-tabs">
+      <button class="auth-tab active" onclick="switchTab('phone')">📱 Phone</button>
+      <button class="auth-tab" onclick="switchTab('email')">📧 Email</button>
+      <button class="auth-tab" onclick="switchTab('google')">🔑 Google</button>
+    </div>
+
+    <!-- PHONE/PASSWORD TAB -->
+    <div id="tab-phone" class="tab-content active">
+      <div id="phone-alert"></div>
+      
+      <div class="role-grid" id="role-grid-phone">
+        <div class="role-card selected" onclick="pickPhoneRole('farmer')">
+          <div class="role-card-icon">👨‍🌾</div>
+          <div class="role-card-title">Farmer</div>
+        </div>
+        <div class="role-card" onclick="pickPhoneRole('buyer')">
+          <div class="role-card-icon">🏪</div>
+          <div class="role-card-title">Buyer</div>
+        </div>
+      </div>
+
+      <form id="phone-form" onsubmit="handlePhoneAuth(event)">
+        <div class="form-group">
+          <label>Full Name</label>
+          <input type="text" id="phone-name" placeholder="Your name" required>
+        </div>
+        <div class="form-group">
+          <label>Mobile Number</label>
+          <input type="tel" id="phone-number" placeholder="10-digit number" maxlength="10" required>
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <input type="password" id="phone-password" placeholder="Min 6 characters" minlength="6" required>
+        </div>
+        <div class="form-group">
+          <label>State</label>
+          <select id="phone-state" required>
+            <option value="">Select State</option>
+            <option>Rajasthan</option><option>Uttar Pradesh</option><option>Madhya Pradesh</option>
+            <option>Punjab</option><option>Haryana</option><option>Maharashtra</option>
+            <option>Gujarat</option><option>Bihar</option><option>West Bengal</option>
+            <option>Karnataka</option><option>Andhra Pradesh</option><option>Tamil Nadu</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>District</label>
+          <input type="text" id="phone-district" placeholder="Your district" required>
+        </div>
+        <button type="submit" class="btn btn-green" id="phone-btn">🚀 Create Account</button>
+      </form>
+
+      <div class="footer-link">
+        Already registered? <a href="#" onclick="switchTab('phone'); document.getElementById('phone-form').style.display='none'; document.getElementById('phone-login').style.display='block'; return false;">Login here</a>
+      </div>
+    </div>
+
+    <!-- EMAIL TAB -->
+    <div id="tab-email" class="tab-content">
+      <div id="email-alert"></div>
+      
+      <div class="email-verify" id="email-verify-info" style="display:none;">
+        <div class="email-verify-step">📧 Verify Your Email</div>
+        <div class="email-verify-text">We'll send you a 6-digit code to confirm your email address</div>
+      </div>
+
+      <form id="email-form" onsubmit="handleEmailAuth(event)">
+        <div class="form-group">
+          <label>Email Address</label>
+          <input type="email" id="email-input" placeholder="your@email.com" required>
+        </div>
+        <div class="form-group">
+          <label>Full Name</label>
+          <input type="text" id="email-name" placeholder="Your name">
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <input type="password" id="email-password" placeholder="Min 6 characters" minlength="6">
+        </div>
+        
+        <div id="email-verify-section" style="display:none; margin-bottom: 16px;">
+          <div class="form-group">
+            <label>Verification Code</label>
+            <input type="text" id="email-code" placeholder="6-digit code" maxlength="6">
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-green" id="email-btn">📬 Send Verification Code</button>
+      </form>
+
+      <div class="footer-link">
+        Or try <a href="#" onclick="switchTab('phone'); return false;">phone registration</a>
+      </div>
+    </div>
+
+    <!-- GOOGLE OAuth TAB -->
+    <div id="tab-google" class="tab-content">
+      <div id="google-alert"></div>
+      
+      <p style="font-size:14px; color:var(--text-muted); margin-bottom:20px; text-align:center;">
+        Sign up or login with your Google account. Your profile info will be used to create your account.
+      </p>
+
+      <div class="oauth-buttons">
+        <button class="oauth-btn google" id="google-btn" onclick="handleGoogleAuth()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+          </svg>
+          Sign up with Google
+        </button>
+      </div>
+
+      <div class="divider"><span>or</span></div>
+
+      <p style="font-size:13px; color:var(--text-muted); text-align:center;">
+        Google authentication requires GOOGLE_CLIENT_ID configured in server environment
+      </p>
+
+      <div class="footer-link" style="margin-top:28px;">
+        Prefer <a href="#" onclick="switchTab('phone'); return false;">phone</a> or <a href="#" onclick="switchTab('email'); return false;">email</a>?
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const SERVER = window.location.origin;
+let phoneRole = 'farmer';
+let emailStep = 'initial'; // initial | verify
+
+function switchTab(tab) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.auth-tab').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+  document.querySelector(`[onclick="switchTab('${tab}')"]`).classList.add('active');
+}
+
+function pickPhoneRole(role) {
+  phoneRole = role;
+  document.querySelectorAll('#role-grid-phone .role-card').forEach(el => el.classList.remove('selected'));
+  event.target.closest('.role-card').classList.add('selected');
+}
+
+async function handlePhoneAuth(e) {
+  e.preventDefault();
+  const btn = document.getElementById('phone-btn');
+  const name = document.getElementById('phone-name').value;
+  const phone = document.getElementById('phone-number').value;
+  const password = document.getElementById('phone-password').value;
+  const state = document.getElementById('phone-state').value;
+  const district = document.getElementById('phone-district').value;
+
+  if (!/^\d{10}$/.test(phone)) {
+    showAlert('phone-alert', 'error', '❌ Enter a valid 10-digit number');
+    return;
+  }
+
+  setBusy(btn, true);
+  try {
+    const res = await fetch(SERVER + '/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, phone, password, role: phoneRole, state, district })
+    });
+    const data = await res.json();
+    
+    if (res.ok && data.token) {
+      localStorage.setItem('km_token', data.token);
+      localStorage.setItem('km_user', JSON.stringify(data.user));
+      showAlert('phone-alert', 'success', '✅ Account created! Redirecting...');
+      setTimeout(() => { window.location.href = '/'; }, 1500);
+    } else {
+      showAlert('phone-alert', 'error', data.error || 'Registration failed');
+    }
+  } catch(e) {
+    showAlert('phone-alert', 'error', '⚠️ Server error. Please try again.');
+  }
+  setBusy(btn, false);
+}
+
+async function handleEmailAuth(e) {
+  e.preventDefault();
+  const email = document.getElementById('email-input').value;
+  const btn = document.getElementById('email-btn');
+
+  if (emailStep === 'initial') {
+    // Send verification code
+    setBusy(btn, true);
+    try {
+      const res = await fetch(SERVER + '/api/auth/email-verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, action: 'send' })
+      });
+      const data = await res.json();
+      
+      if (res.ok) {
+        emailStep = 'verify';
+        document.getElementById('email-name').value = '';
+        document.getElementById('email-password').value = '';
+        document.getElementById('email-input').disabled = true;
+        document.getElementById('email-verify-info').style.display = 'block';
+        document.getElementById('email-verify-section').style.display = 'block';
+        btn.textContent = '✅ Verify & Create Account';
+        showAlert('email-alert', 'success', '📧 Code sent to your email!');
+      } else {
+        showAlert('email-alert', 'error', data.error || 'Could not send code');
+      }
+    } catch(e) {
+      showAlert('email-alert', 'error', '⚠️ Server error');
+    }
+    setBusy(btn, false);
+  } else {
+    // Verify and register
+    const name = document.getElementById('email-name').value;
+    const password = document.getElementById('email-password').value;
+    const code = document.getElementById('email-code').value;
+
+    if (!name || !password) {
+      showAlert('email-alert', 'error', '❌ Please enter name and password');
+      return;
+    }
+
+    setBusy(btn, true);
+    try {
+      const res = await fetch(SERVER + '/api/auth/email-register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, name, password, role: 'farmer' })
+      });
+      const data = await res.json();
+      
+      if (res.ok && data.token) {
+        localStorage.setItem('km_token', data.token);
+        localStorage.setItem('km_user', JSON.stringify(data.user));
+        showAlert('email-alert', 'success', '✅ Account created! Redirecting...');
+        setTimeout(() => { window.location.href = '/'; }, 1500);
+      } else {
+        showAlert('email-alert', 'error', data.error || 'Registration failed');
+      }
+    } catch(e) {
+      showAlert('email-alert', 'error', '⚠️ Server error');
+    }
+    setBusy(btn, false);
+  }
+}
+
+async function handleGoogleAuth() {
+  try {
+    const res = await fetch(SERVER + '/api/auth/google');
+    const data = await res.json();
+    if (data.url) {
+      window.location.href = data.url;
+    } else {
+      showAlert('google-alert', 'error', '❌ Google auth not configured');
+    }
+  } catch(e) {
+    showAlert('google-alert', 'error', '⚠️ Could not initiate Google login');
+  }
+}
+
+function showAlert(id, type, msg) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.innerHTML = `<div class="alert alert-${type}">${msg}</div>`;
+  if (type !== 'success') setTimeout(() => el.innerHTML = '', 6000);
+}
+
+function setBusy(btn, busy) {
+  btn.disabled = busy;
+  if (busy) {
+    btn.innerHTML = '<span class="spinner"></span> Processing...';
+  } else {
+    btn.innerHTML = btn.form.id === 'phone-form' ? '🚀 Create Account' : '📬 Send Verification Code';
+  }
+}
+
+// Check if already logged in
+(async () => {
+  const token = localStorage.getItem('km_token');
+  if (token) {
+    try {
+      const res = await fetch(SERVER + '/api/auth/me', {
+        headers: { 'Authorization': 'Bearer ' + token }
+      });
+      if (res.ok) {
+        window.location.href = '/';
+      }
+    } catch(e) {}
+  }
+})();
+</script>
+
+</body>
+</html>
